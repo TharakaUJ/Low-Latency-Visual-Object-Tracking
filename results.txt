@@ -1,0 +1,19 @@
+--- Final Benchmark Results ---
+Total Frames Processed: 464
+Average Inference Time: 114.25 ms/frame
+Average Total FPS:      8.19 frames/sec
+
+
+
+--- Final Tracking Benchmark Results ---
+Tracker Algorithm:      bytetrack.yaml
+Total Frames Processed: 464
+Avg Pipeline Time:      113.42 ms/frame
+Average Total FPS:      8.04 frames/sec
+
+
+// GPU
+--- Final Benchmark Results ---
+Total Frames Processed: 464
+Average Inference Time: 30.08 ms/frame
+Average Total FPS:      27.23 frames/sec
