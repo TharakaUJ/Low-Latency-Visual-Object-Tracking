@@ -46,6 +46,29 @@
 # TD_RESET_N PIN_G7 TV Decoder Reset 3.3V
 # I2C_SCLK PIN_B7 I2C Clock 3.3V
 # I2C_SDAT PIN_A8 I2C Data 3.3V
+
+
+# LEDR[0] PIN_G19 LED Red[0] 2.5V
+# LEDR[1] PIN_F19 LED Red[1] 2.5V
+# LEDR[2] PIN_E19 LED Red[2] 2.5V
+# LEDR[3] PIN_F21 LED Red[3] 2.5V
+# LEDR[4] PIN_F18 LED Red[4] 2.5V
+# LEDR[5] PIN_E18 LED Red[5] 2.5V
+# LEDR[6] PIN_J19 LED Red[6] 2.5V
+# LEDR[7] PIN_H19 LED Red[7] 2.5V
+# LEDR[8] PIN_J17 LED Red[8] 2.5V
+
+# LEDG[0] PIN_E21 LED Green[0] 2.5V
+# LEDG[1] PIN_E22 LED Green[1] 2.5V
+# LEDG[2] PIN_E25 LED Green[2] 2.5V
+# LEDG[3] PIN_E24 LED Green[3] 2.5V
+# LEDG[4] PIN_H21 LED Green[4] 2.5V
+# LEDG[5] PIN_G20 LED Green[5] 2.5V
+# LEDG[6] PIN_G22 LED Green[6] 2.5V
+# LEDG[7] PIN_G21 LED Green[7] 2.5V
+# LEDG[8] PIN_F17 LED Green[8] 2.5V
+
+
 # ------------------------------------------------------------------------------
 # Clock and Reset (Using standard DE2-115 pins)
 # ------------------------------------------------------------------------------
@@ -132,11 +155,29 @@ set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to TD_VS
 set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to TD_CLK27
 set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to TD_RESET_N
 
-# ------------------------------------------------------------------------------
-# I2C Pins (Provided in list but absent in RTL top module)
-# Uncomment these if you add I2C_SCLK and I2C_SDAT to your module ports
-# ------------------------------------------------------------------------------
-# set_location_assignment PIN_B7 -to I2C_SCLK
-# set_location_assignment PIN_A8 -to I2C_SDAT
-# set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to I2C_SCLK
-# set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to I2C_SDAT
+set_location_assignment PIN_B7 -to I2C_SCLK
+set_location_assignment PIN_A8 -to I2C_SDAT
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to I2C_SCLK
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to I2C_SDAT
+
+
+set_location_assignment PIN_G19 -to LEDR[0]
+set_location_assignment PIN_F19 -to LEDR[1]
+set_location_assignment PIN_E19 -to LEDR[2]
+set_location_assignment PIN_F21 -to LEDR[3]
+set_location_assignment PIN_F18 -to LEDR[4]
+set_location_assignment PIN_E18 -to LEDR[5]
+set_location_assignment PIN_J19 -to LEDR[6]
+set_location_assignment PIN_H19 -to LEDR[7]
+set_instance_assignment -name IO_STANDARD "2.5 V" -to LEDR[*]
+
+set_location_assignment PIN_E21 -to LEDG[0]
+set_location_assignment PIN_E22 -to LEDG[1]
+set_location_assignment PIN_E25 -to LEDG[2]
+set_location_assignment PIN_E24 -to LEDG[3]
+set_location_assignment PIN_H21 -to LEDG[4]
+set_location_assignment PIN_G20 -to LEDG[5]
+set_location_assignment PIN_G22 -to LEDG[6]
+set_location_assignment PIN_G21 -to LEDG[7]
+set_location_assignment PIN_F17 -to LEDG[8]
+set_instance_assignment -name IO_STANDARD "2.5 V" -to LEDG[*]
