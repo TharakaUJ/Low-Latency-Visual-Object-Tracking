@@ -118,8 +118,8 @@ module video_in # (
     // end
 
     // // Bypass the TV chip data entirely to test your VGA path
-    // assign oVideo_R = (test_x < 200) ? 8'hFF : 8'h00; // Solid Red vertical bar
-    // assign oVideo_G = 8'h00;
+    // assign oVideo_G = (test_x < 10) ? 8'hFF : 8'h00; // Solid Red vertical bar
+    // assign oVideo_R = 8'h00;
     // assign oVideo_B = 8'h00;
 
 endmodule

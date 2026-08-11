@@ -2,7 +2,7 @@
 
 module vga_out (
     input  wire       CLOCK_50,
-    input  wire [7:0] rst_n,
+    input  wire       rst_n,
     input  wire [7:0] iVideo_R,
     input  wire [7:0] iVideo_G,
     input  wire [7:0] iVideo_B,
@@ -16,6 +16,7 @@ module vga_out (
     output reg        VGA_HS,
     output reg        VGA_VS,
     output reg        VGA_CLK,      // Clean 25MHz Toggle Output for DAC
+    output reg        oPixelReadEn,
     output wire       VGA_BLANK_N,
     output wire       VGA_SYNC_N
 );
@@ -96,8 +97,11 @@ module vga_out (
             VGA_R <= 8'h00;
             VGA_G <= 8'h00;
             VGA_B <= 8'h00;
+            oPixelReadEn <= 1'b0;
         end else if (clk_en) begin
-            if (video_on) begin
+            oPixelReadEn <= video_on && iVideo_Valid;
+
+            if (video_on && iVideo_Valid) begin
                 // WARNING: Directly sampling across clock domains will still jitter!
                 VGA_R <= iVideo_R;
                 VGA_G <= iVideo_G;
