@@ -88,8 +88,12 @@ module vga_out (
     end
 
     wire video_on = (h_count < H_ACTIVE) && (v_count < V_ACTIVE);
-    assign VGA_BLANK_N = video_on; 
     assign VGA_SYNC_N  = 1'b0;     
+
+    // Registered blank, so it lines up with the registered HS/VS/RGB below
+    // instead of leading them by one clk_en cycle.
+    reg video_on_reg;
+    assign VGA_BLANK_N = video_on_reg;
 
     // Latched Output Pipeline to prevent glitching on display
     always @(posedge CLOCK_50 or posedge rst) begin
@@ -97,8 +101,10 @@ module vga_out (
             VGA_R <= 8'h00;
             VGA_G <= 8'h00;
             VGA_B <= 8'h00;
+            video_on_reg <= 1'b0;
             oPixelReadEn <= 1'b0;
         end else if (clk_en) begin
+            video_on_reg <= video_on;
             oPixelReadEn <= video_on && iVideo_Valid;
 
             if (video_on && iVideo_Valid) begin
