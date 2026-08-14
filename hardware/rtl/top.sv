@@ -25,7 +25,7 @@ module top (
     output wire        I2C_SCLK,
     inout  wire        I2C_SDAT,
 
-    output wire  [7:0] LEDR,
+    output wire  [17:0] LEDR,
     output wire  [8:0] LEDG,
     input  wire  [7:0] SW,
 
@@ -49,8 +49,18 @@ module top (
     localparam integer PIXEL_FIFO_ADDR_WIDTH = 11; // larger depth for SDRAM burst buffering
     localparam integer SOURCE_ACTIVE_WIDTH  = 720;
     localparam integer TARGET_ACTIVE_WIDTH  = 640;
+    localparam integer TARGET_ACTIVE_HEIGHT = 480;
     localparam integer H_CROP_START         = (SOURCE_ACTIVE_WIDTH - TARGET_ACTIVE_WIDTH) / 2;
     localparam integer H_CROP_END           = H_CROP_START + TARGET_ACTIVE_WIDTH;
+    // Both the ping-pong frame buffer and the SDRAM master's own read/write
+    // pointers must wrap at exactly TARGET_ACTIVE_WIDTH*TARGET_ACTIVE_HEIGHT*2
+    // words -- i.e. the amount of data actually written per CROPPED frame
+    // (2 x 16-bit beats per pixel). Both modules previously defaulted to
+    // 720x480, but only 640x480 pixels are ever written after the H-crop,
+    // so the internal write_ptr/read_ptr never wrapped at the same point
+    // that frame_buffer_controller swapped ping-pong buffers. That drift
+    // is a likely cause of the screen not being fully/correctly covered.
+    localparam integer FRAME_WORDS_CROPPED  = TARGET_ACTIVE_WIDTH * TARGET_ACTIVE_HEIGHT * 2;
 
     // 1) Capture FIFO: asynchronous capture from TV domain into 50MHz domain
     wire [PIXEL_STREAM_WIDTH-1:0] pixel_capture_wr_data;
@@ -106,21 +116,40 @@ module top (
     wire       vga_fifo_V = sdram_rd_rd_data[25];
 
 
-    wire ack, trn_end, ack_enable;
 
-    assign LEDR[0] = ack;
-    assign LEDR[1] = trn_end;
-    assign LEDR[2] = ack_enable;
-    assign LEDR[3] = video_valid;
-    assign LEDR[4] = sdram_wr_full;
-    assign LEDR[5] = sdram_wr_empty;
-    assign LEDR[6] = sdram_rd_rd_en;
-    assign LEDR[7] = pixel_capture_wr_en;
-    assign LEDG[8] = 1'b0;
+
+
+    assign LEDR[7:0] = vga_fifo_R[7:0]; // Debug: show the last pixel written to the SDRAM read FIFO
+    assign LEDR[15:8] = vga_fifo_B[7:0]; // Debug: show the last pixel written to the SDRAM read FIFO
+    assign LEDR[16] = pll_locked; // Debug: PLL locked
+    assign LEDR[17] = sdram_rd_empty; // Debug: SDRAM read FIFO empty
+    // (previously wired to clk_sdram_shifted -- driving a free-running
+    // ~100MHz clock onto an LED does not show anything useful and the
+    // comment already claimed it was meant to show the read-FIFO-empty
+    // status, so it's fixed to actually do that.)
+
+
+    // PLL: generates the SDRAM-domain clock and a phase-shifted DRAM_CLK
+    wire clk_sys;      // replaces CLOCK_50 for all SDRAM/VGA/logic domains
+    wire clk_sdram_shifted;
+    wire pll_locked;
+
+    sdram_pll sdram_pll_inst (
+        .inclk0 (CLOCK_50),
+        .c0     (clk_sys),            // 0 degrees -- system/controller clock
+        .c1     (clk_sdram_shifted),  // -3ns shift -- physical SDRAM clock
+        .locked (pll_locked)
+    );
+
+    assign DRAM_CLK = clk_sdram_shifted;
+
+    // Combine the button reset with PLL lock so nothing runs until the
+    // clock is stable
+    wire rst_n_sys = KEY[0] & pll_locked;
 
     video_in video_in_decoder (
-        .iCLK_50(CLOCK_50),
-        .iRST_N(KEY[0]),
+        .iCLK_50(clk_sys),
+        .iRST_N(rst_n_sys),
         .TD_CLK27(TD_CLK27),
         .TD_DATA(TD_DATA),
         .TD_HS(TD_HS),
@@ -141,12 +170,12 @@ module top (
         .ADDR_WIDTH(PIXEL_FIFO_ADDR_WIDTH)
     ) pixel_capture_fifo (
         .wr_clk(TD_CLK27),
-        .wr_rst_n(KEY[0]),
+        .wr_rst_n(rst_n_sys),
         .wr_en(pixel_capture_wr_en),
         .wr_data(pixel_capture_wr_data),
         .full(pixel_capture_full),
-        .rd_clk(CLOCK_50),
-        .rd_rst_n(KEY[0] & SW[0]),
+        .rd_clk(clk_sys),
+        .rd_rst_n(rst_n_sys & SW[0]),
         .rd_en(pixel_capture_rd_en),
         .rd_data(pixel_capture_rd_data),
         .empty(pixel_capture_empty)
@@ -157,13 +186,13 @@ module top (
         .DATA_WIDTH(PIXEL_STREAM_WIDTH),
         .ADDR_WIDTH(PIXEL_FIFO_ADDR_WIDTH)
     ) sdram_wr_fifo (
-        .wr_clk(CLOCK_50),
-        .wr_rst_n(KEY[0]),
+        .wr_clk(clk_sys),
+        .wr_rst_n(rst_n_sys),
         .wr_en(sdram_wr_wr_en),
         .wr_data(sdram_wr_wr_data),
         .full(sdram_wr_full),
-        .rd_clk(CLOCK_50),
-        .rd_rst_n(KEY[0] & SW[0]),
+        .rd_clk(clk_sys),
+        .rd_rst_n(rst_n_sys),
         .rd_en(sdram_wr_rd_en_reg),
         .rd_data(sdram_wr_rd_data),
         .empty(sdram_wr_empty)
@@ -174,21 +203,21 @@ module top (
         .DATA_WIDTH(PIXEL_STREAM_WIDTH),
         .ADDR_WIDTH(PIXEL_FIFO_ADDR_WIDTH)
     ) sdram_rd_fifo (
-        .wr_clk(CLOCK_50),
-        .wr_rst_n(KEY[0]),
+        .wr_clk(clk_sys),
+        .wr_rst_n(rst_n_sys),
         .wr_en(sdram_rd_fifo_wr_en_reg),
         .wr_data(sdram_rd_fifo_wr_data_reg),
         .full(sdram_rd_full),
-        .rd_clk(CLOCK_50),
-        .rd_rst_n(KEY[0] & SW[0]),
+        .rd_clk(clk_sys),
+        .rd_rst_n(rst_n_sys & SW[0]),
         .rd_en(sdram_rd_rd_en),
         .rd_data(sdram_rd_rd_data),
         .empty(sdram_rd_empty)
     );
 
     vga_out vga_output (
-        .CLOCK_50(CLOCK_50),
-        .rst_n(KEY[0] & SW[0]),
+        .CLOCK_50(clk_sys),
+        .rst_n(rst_n_sys & SW[0]),
         .iVideo_R(vga_fifo_R),
         .iVideo_G(vga_fifo_G),
         .iVideo_B(vga_fifo_B),
@@ -210,10 +239,27 @@ module top (
     wire [22:0] sdram_write_base;
     wire [22:0] sdram_read_base;
 
-    frame_buffer_controller fb_ctrl (
+    // NOTE: TD_VS from the ADV7181B is a field sync for interlaced
+    // NTSC/PAL sources -- it pulses twice per full visual frame (once per
+    // field), not once. Swapping the write buffer on every edge of it, as
+    // done below, means each ping-pong buffer only ever receives ONE
+    // field's worth of active lines (~240 of 480) before the buffer is
+    // swapped away, leaving the remaining lines full of stale/old data.
+    // That alone is enough to explain a picture that doesn't cover the
+    // whole screen. Fixing this properly requires decoding field ID (a
+    // decoder status pin/register, or embedded field bit) and writing
+    // each field's lines to the correct interleaved row -- not implemented
+    // here. Confirm with a logic analyzer / ChipScope whether TD_VS is
+    // firing once or twice per visible frame before assuming this design
+    // even needs it (some ADV7181B configs can be set to output
+    // progressively / line-doubled).
+    frame_buffer_controller #(
+        .WIDTH  (TARGET_ACTIVE_WIDTH),
+        .HEIGHT (TARGET_ACTIVE_HEIGHT)
+    ) fb_ctrl (
         .clk_tv(TD_CLK27),
-        .clk_vga(CLOCK_50),
-        .rst_n(KEY[0] & SW[0]),
+        .clk_vga(clk_sys),
+        .rst_n(rst_n_sys & SW[0]),
         .tv_frame_done(v_sync),
         .vga_vsync(VGA_VS),
         .sdram_write_base(sdram_write_base),
@@ -226,10 +272,11 @@ module top (
         .DATA_WIDTH(16),
         .ROW_WIDTH(13),
         .COL_WIDTH(9),
-        .BANK_WIDTH(2)
+        .BANK_WIDTH(2),
+        .FRAME_WORDS(FRAME_WORDS_CROPPED)
     ) sdram_master (
-        .clk(CLOCK_50),
-        .rst_n(KEY[0] & SW[0]),
+        .clk(clk_sys),
+        .rst_n(rst_n_sys & SW[0]),
         .sdram_write_base(sdram_write_base),
         .sdram_read_base(sdram_read_base),
         .sdram_wr_empty(sdram_ctrl_wr_empty),
@@ -245,14 +292,27 @@ module top (
         .DRAM_WE_N(DRAM_WE_N),
         .DRAM_BA(DRAM_BA),
         .DRAM_ADDR(DRAM_ADDR),
-        .DRAM_DQM(DRAM_DQM),
-        .DRAM_DQ(DRAM_DQ)
+        // sdram_de2115_controller is a 16-bit-wide engine (DATA_WIDTH=16),
+        // but the DE2-115's physical SDRAM bus is 32 bits wide (DRAM_DQ[31:0],
+        // DRAM_DQM[3:0]). Connecting the 16-bit/2-bit module ports straight
+        // to the 32-bit/4-bit top-level ports (as this file did before)
+        // silently truncates: DRAM_DQ[31:16] and DRAM_DQM[3:2] are left
+        // floating/undriven on the physical pins. A floating DQM input on
+        // the SDRAM chip is out-of-spec and can cause it to drive/mask the
+        // upper data byte-lanes unpredictably -- risking bus contention
+        // with whatever else is on those lines. Explicitly use only the
+        // lower 16 bits and permanently mask (disable) the upper 2 DQM
+        // bits so the unused half of the bus stays safely deselected.
+        .DRAM_DQM(DRAM_DQM[1:0]),
+        .DRAM_DQ(DRAM_DQ[15:0])
     );
+
+    assign DRAM_DQM[3:2] = 2'b11; // upper 16 data bits unused -- keep masked/deselected
 
     // Simple mover: on CLOCK_50 domain move captured pixels into SDRAM write FIFO
     reg [PIXEL_STREAM_WIDTH-1:0] sdram_wr_data_reg;
-    always @(posedge TD_CLK27 or negedge KEY[0]) begin
-        if (!KEY[0]) begin
+    always @(posedge TD_CLK27 or negedge rst_n_sys) begin
+        if (!rst_n_sys) begin
             source_x_count <= 10'd0;
             h_sync_d <= 1'b0;
         end else begin
@@ -272,8 +332,8 @@ module top (
         end
     end
 
-    always @(posedge CLOCK_50 or negedge KEY[0]) begin
-        if (!KEY[0]) begin
+    always @(posedge clk_sys or negedge rst_n_sys) begin
+        if (!rst_n_sys) begin
             pixel_capture_rd_en_reg <= 1'b0;
             sdram_wr_wr_en_reg <= 1'b0;
             sdram_wr_data_reg <= {PIXEL_STREAM_WIDTH{1'b0}};
@@ -338,5 +398,14 @@ module top (
     assign sdram_wr_wr_data = sdram_wr_data_reg;
     assign sdram_ctrl_wr_data = sdram_ctrl_wr_data_reg;
 
+    I2C_Master i2c_master (
+    .I2C_clk(CLOCK_50),
+    .RESET(KEY[0]),
+    .I2C_SCLK(I2C_SCLK),
+    .I2C_SDATA(I2C_SDAT),
+    .TRN_END(trn_end),
+    .ACK(ack),
+    .ACK_enable(ack_enable)
+    );
 
 endmodule

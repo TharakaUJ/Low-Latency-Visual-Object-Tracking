@@ -107,7 +107,7 @@ module vga_out (
             video_on_reg <= video_on;
             oPixelReadEn <= video_on && iVideo_Valid;
 
-            if (video_on && iVideo_Valid) begin
+            if (video_on) begin
                 // WARNING: Directly sampling across clock domains will still jitter!
                 VGA_R <= iVideo_R;
                 VGA_G <= iVideo_G;

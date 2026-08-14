@@ -43,7 +43,11 @@ module sdram_de2115_controller #(
     parameter integer T_MRD           = 2,     // mode-register set      (cycles)
     parameter integer CAS_LATENCY     = 2,     // CL2 (safe at 100MHz)
     parameter integer T_WR            = 2,     // write recovery         (cycles)
-    parameter integer REFRESH_INTERVAL= 780    // ~7.8us @100MHz -> 8192 refreshes/64ms
+    parameter integer REFRESH_INTERVAL= 780,   // ~7.8us @100MHz -> 8192 refreshes/64ms
+    // Must match WIDTH*HEIGHT*2 in frame_buffer_controller (2 SDRAM words
+    // per pixel) so write_ptr/read_ptr wrap back to 0 at exactly the same
+    // offset the ping-pong base swaps at.
+    parameter integer FRAME_WORDS     = 720*480*2
 )(
     input  wire                      clk,
     input  wire                      rst_n,
@@ -345,7 +349,13 @@ module sdram_de2115_controller #(
                 dq_oe          <= 1'b1;
                 dq_out         <= sdram_wr_rd_data;
                 sdram_wr_rd_en <= 1'b1;   // pop the write FIFO this cycle
-                write_ptr      <= write_ptr + 1'b1;
+                // Wrap at the frame boundary -- must match the point where
+                // frame_buffer_controller swaps sdram_write_base, or writes
+                // silently drift into the other (or unwritten) buffer.
+                if (write_ptr == FRAME_WORDS-1)
+                    write_ptr <= {ADDR_WIDTH{1'b0}};
+                else
+                    write_ptr <= write_ptr + 1'b1;
                 state          <= S_WR_RECOVER;
                 wait_cnt       <= 16'd0;
             end
@@ -391,7 +401,10 @@ module sdram_de2115_controller #(
                 ba_r     <= rd_bank;
                 addr_r   <= {{(ROW_WIDTH-COL_WIDTH-1){1'b0}}, 1'b0, rd_col}; // A10=0
                 dqm_r    <= {(DATA_WIDTH/8){1'b0}};
-                read_ptr <= read_ptr + 1'b1;
+                if (read_ptr == FRAME_WORDS-1)
+                    read_ptr <= {ADDR_WIDTH{1'b0}};
+                else
+                    read_ptr <= read_ptr + 1'b1;
                 wait_cnt <= 16'd0;
                 state    <= S_RD_CAS_WT;
             end

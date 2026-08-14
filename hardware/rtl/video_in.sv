@@ -6,7 +6,7 @@ module video_in # (
     input  wire       iCLK_50,
     input  wire       iRST_N,
 
-    // TV Decoder Hardware Pins (From ADV7181B chip)
+    // TV Decoder Hardware Pins (Bypassed internally)
     input  wire       TD_CLK27,
     input  wire [7:0] TD_DATA,
     input  wire       TD_HS,
@@ -14,112 +14,130 @@ module video_in # (
     output wire       TD_RESET_N,
 
     // Decoded Video Output Interface (RGB Format)
-    output wire [7:0] oVideo_R,    // Red channel
-    output wire [7:0] oVideo_G,    // Green channel
-    output wire [7:0] oVideo_B,    // Blue channel
+    output reg  [7:0] oVideo_R,    // Red channel
+    output reg  [7:0] oVideo_G,    // Green channel
+    output reg  [7:0] oVideo_B,    // Blue channel
     output reg        oVideo_Valid,// High when valid pixel data is present
     output reg        oV_Sync,     // Processed Vertical Sync
     output reg        oH_Sync,     // Processed Horizontal Sync
     output wire [7:0] debug_led
 );
 
+    // Keep safe constants for hardware assignments
     assign TD_RESET_N = iRST_N;
-    assign debug_led  = TD_DATA; 
+    assign debug_led  = 8'hA5; // Fixed pattern for visualization
 
-    // Pipeline Registers
-    reg [7:0] rData_d1;
-    reg       rHS_d1;
-    reg       rVS_d1;
-    reg       rHS_d2; 
-    
-    reg [1:0] rPixel_Count;
-    reg [7:0] Y, U, V;
+    // =======================================================
+    // NTSC 27MHz Timing Constants (Standard 858x525 Frame)
+    // =======================================================
+    localparam H_ACTIVE     = 720;
+    localparam H_FRONT_PORCH= 16;
+    localparam H_SYNC_WIDTH = 64;
+    localparam H_BACK_PORCH = 58;
+    localparam H_TOTAL      = H_ACTIVE + H_FRONT_PORCH + H_SYNC_WIDTH + H_BACK_PORCH; // 858
 
-    // Detect the rising edge of HS relative to the d1 registered domain
-    wire hs_rising_edge = (rHS_d1 && !rHS_d2);
+    localparam V_ACTIVE     = 485;
+    localparam V_FRONT_PORCH= 4;
+    localparam V_SYNC_WIDTH = 3;
+    localparam V_BACK_PORCH = 33;
+    localparam V_TOTAL      = V_ACTIVE + V_FRONT_PORCH + V_SYNC_WIDTH + V_BACK_PORCH; // 525
 
+    // Width of each color bar (720 active pixels / 8 bars = 90 pixels per bar)
+    localparam BAR_WIDTH    = 90;
+
+    // Internal XY Scan Counters
+    reg [9:0] h_cnt;
+    reg [9:0] v_cnt;
+
+    // =======================================================
+    // Sync and Active Region Generation
+    // =======================================================
     always @(posedge TD_CLK27 or negedge iRST_N) begin
         if (!iRST_N) begin
-            rData_d1     <= 8'h00;
-            rHS_d1       <= 1'b0;
-            rVS_d1       <= 1'b0;
-            rHS_d2       <= 1'b0;
-            Y            <= 8'h00;
-            U            <= 8'h80; 
-            V            <= 8'h80; 
+            h_cnt        <= 10'd0;
+            v_cnt        <= 10'd0;
+            oH_Sync      <= 1'b1;
+            oV_Sync      <= 1'b1;
             oVideo_Valid <= 1'b0;
-            oV_Sync      <= 1'b0;
-            oH_Sync      <= 1'b0;
-            rPixel_Count <= 2'b00;
         end else begin
-            // Stage 1: Register inputs directly from the chip
-            rData_d1 <= TD_DATA;
-            rHS_d1   <= TD_HS;
-            rVS_d1   <= TD_VS;
-            
-            // Stage 2: Secondary delay for edge matching
-            rHS_d2   <= rHS_d1;
+            // Horizontal Counter
+            if (h_cnt == (H_TOTAL - 1)) begin
+                h_cnt <= 10'd0;
+                // Vertical Counter
+                if (v_cnt == (V_TOTAL - 1)) begin
+                    v_cnt <= 10'd0;
+                end else begin
+                    v_cnt <= v_cnt + 1'b1;
+                end
+            end else begin
+                h_cnt <= h_cnt + 1'b1;
+            end
 
-            // Align sync signals with the 1-clock data capture delay
-            oH_Sync  <= rHS_d1;
-            oV_Sync  <= rVS_d1;
-
-            // Enforce stream discipline 
-            if (hs_rising_edge && rVS_d1) begin
-                // Line starts exactly here. Capture first byte (U/Cb) immediately.
+            // Generate Active Video Window Flag
+            if ((h_cnt < H_ACTIVE) && (v_cnt < V_ACTIVE)) begin
                 oVideo_Valid <= 1'b1;
-                U            <= rData_d1; // First byte of YUV422 is typically U (Cb)
-                rPixel_Count <= 2'b01;    // Next byte will be Y0 (2'b01)
-            end else if (rHS_d1 && rVS_d1) begin
-                oVideo_Valid <= 1'b1;
-                rPixel_Count <= rPixel_Count + 1'b1;
-
-                case (rPixel_Count)
-                    2'b00: U <= rData_d1; // Cb
-                    2'b01: Y <= rData_d1; // Y0
-                    2'b10: V <= rData_d1; // Cr
-                    2'b11: Y <= rData_d1; // Y1
-                endcase
             end else begin
                 oVideo_Valid <= 1'b0;
-                rPixel_Count <= 2'b00;
+            end
+
+            // Generate Active-Low H_Sync (Matches typical NTSC TV sync polarity)
+            if ((h_cnt >= (H_ACTIVE + H_FRONT_PORCH)) && 
+                (h_cnt < (H_ACTIVE + H_FRONT_PORCH + H_SYNC_WIDTH))) begin
+                oH_Sync <= 1'b0;
+            end else begin
+                oH_Sync <= 1'b1;
+            end
+
+            // Generate Active-Low V_Sync
+            if ((v_cnt >= (V_ACTIVE + V_FRONT_PORCH)) && 
+                (v_cnt < (V_ACTIVE + V_FRONT_PORCH + V_SYNC_WIDTH))) begin
+                oV_Sync <= 1'b0;
+            end else begin
+                oV_Sync <= 1'b1;
             end
         end
     end
 
     // =======================================================
-    // YCbCr to RGB Color Space Conversion (Combinational)
+    // 8-Color Bar Generator Matrix
     // =======================================================
-    
-    function [7:0] clamp;
-        input signed [31:0] val;
-        begin
-            if (val < 0)
-                clamp = 8'd0;
-            else if (val > 255)
-                clamp = 8'd255;
-            else
-                clamp = val[7:0];
+    always @(posedge TD_CLK27 or negedge iRST_N) begin
+        if (!iRST_N) begin
+            oVideo_R <= 8'h00;
+            oVideo_G <= 8'h00;
+            oVideo_B <= 8'h00;
+        end else if (oVideo_Valid) begin
+            if (grey_scale) begin
+                // Grayscale gradient staircase step down
+                case (h_cnt / BAR_WIDTH)
+                    3'd0: begin oVideo_R <= 8'hFF; oVideo_G <= 8'hFF; oVideo_B <= 8'hFF; end // White
+                    3'd1: begin oVideo_R <= 8'hDB; oVideo_G <= 8'hDB; oVideo_B <= 8'hDB; end 
+                    3'd2: begin oVideo_R <= 8'hB6; oVideo_G <= 8'hB6; oVideo_B <= 8'hB6; end 
+                    3'd3: begin oVideo_R <= 8'h92; oVideo_G <= 8'h92; oVideo_B <= 8'h92; end 
+                    3'd4: begin oVideo_R <= 8'h6D; oVideo_G <= 8'h6D; oVideo_B <= 8'h6D; end 
+                    3'd5: begin oVideo_R <= 8'h49; oVideo_G <= 8'h49; oVideo_B <= 8'h49; end 
+                    3'd6: begin oVideo_R <= 8'h24; oVideo_G <= 8'h24; oVideo_B <= 8'h24; end 
+                    default: begin oVideo_R <= 8'h00; oVideo_G <= 8'h00; oVideo_B <= 8'h00; end // Black
+                endcase
+            end else begin
+                // Standard 8 Color Bars: White, Yellow, Cyan, Green, Magenta, Red, Blue, Black
+                case (h_cnt / BAR_WIDTH)
+                    3'd0: begin oVideo_R <= 8'hFF; oVideo_G <= 8'hFF; oVideo_B <= 8'hFF; end // White
+                    3'd1: begin oVideo_R <= 8'hFF; oVideo_G <= 8'hFF; oVideo_B <= 8'h00; end // Yellow
+                    3'd2: begin oVideo_R <= 8'h00; oVideo_G <= 8'hFF; oVideo_B <= 8'hFF; end // Cyan
+                    3'd3: begin oVideo_R <= 8'h00; oVideo_G <= 8'hFF; oVideo_B <= 8'h00; end // Green
+                    3'd4: begin oVideo_R <= 8'hFF; oVideo_G <= 8'h00; oVideo_B <= 8'hFF; end // Magenta
+                    3'd5: begin oVideo_R <= 8'hFF; oVideo_G <= 8'h00; oVideo_B <= 8'h00; end // Red
+                    3'd6: begin oVideo_R <= 8'h00; oVideo_G <= 8'h00; oVideo_B <= 8'hFF; end // Blue
+                    default: begin oVideo_R <= 8'h00; oVideo_G <= 8'h00; oVideo_B <= 8'h00; end // Black
+                endcase
+            end
+        end else begin
+            // Blanking period values must be completely zeroed out
+            oVideo_R <= 8'h00;
+            oVideo_G <= 8'h00;
+            oVideo_B <= 8'h00;
         end
-    endfunction
-
-    wire signed [31:0] C = $signed({1'b0, Y}) - 32'sd16;
-    wire signed [31:0] D = $signed({1'b0, U}) - 32'sd128;
-    wire signed [31:0] E = $signed({1'b0, V}) - 32'sd128;
-
-    assign oVideo_R = (grey_scale) ? Y : clamp((298 * C             + 409 * E + 128) >>> 8);
-    assign oVideo_G = (grey_scale) ? Y : clamp((298 * C - 100 * D - 208 * E + 128) >>> 8);
-    assign oVideo_B = (grey_scale) ? Y : clamp((298 * C + 516 * D           + 128) >>> 8);
-
-    // reg [9:0] test_x;
-    // always @(posedge TD_CLK27) begin
-    //     if (hs_rising_edge) test_x <= 0;
-    //     else if (oVideo_Valid) test_x <= test_x + 1;
-    // end
-
-    // // Bypass the TV chip data entirely to test your VGA path
-    // assign oVideo_G = (test_x < 10) ? 8'hFF : 8'h00; // Solid Red vertical bar
-    // assign oVideo_R = 8'h00;
-    // assign oVideo_B = 8'h00;
+    end
 
 endmodule

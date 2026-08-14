@@ -9,3 +9,6 @@ yoloe-26n-seg_openvino_model/
 yoloe-26l-seg_openvino_model/
 
 Quartus/
+
+*.pyc
+**/__pycache__/

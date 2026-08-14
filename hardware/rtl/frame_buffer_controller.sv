@@ -14,7 +14,10 @@ module frame_buffer_controller #(
     output reg  [ADDR_WIDTH-1:0] sdram_read_base
 );
 
-    localparam integer FRAME_WORDS = WIDTH * HEIGHT;
+    // Each pixel is packed into 2 x 16-bit SDRAM beats (see top.sv bridge
+    // logic), so a buffer is WIDTH*HEIGHT*2 SDRAM words, not WIDTH*HEIGHT.
+    // BASE_B must start after that or the two ping-pong buffers overlap.
+    localparam integer FRAME_WORDS = WIDTH * HEIGHT * 2;
     localparam [ADDR_WIDTH-1:0] BASE_A = {ADDR_WIDTH{1'b0}};
     localparam [ADDR_WIDTH-1:0] BASE_B = FRAME_WORDS[ADDR_WIDTH-1:0];
 
