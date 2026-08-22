@@ -1,0 +1,10 @@
+
+
+/home/tharaka/Documents/Low-Latency-Visual-Object-Tracking/hardware/rtl/Sdram_PLL.v
+
+Aug 22 11AM:57:56>: Error in CNX file format.
+
+Error messages are listed in file
+/home/tharaka/Documents/Low-Latency-Visual-Object-Tracking/hardware/rtl/Sdram_PLL.cnxerr.
+
+Can't create the custom megafunction variation file(s)
