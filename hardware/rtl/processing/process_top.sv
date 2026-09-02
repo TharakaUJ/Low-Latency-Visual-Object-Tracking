@@ -1,5 +1,5 @@
 module process_top #(
-    parameter int WIN = 3
+    parameter int WIN = 16
 )(
     input logic clk,
     input logic rst_n,
