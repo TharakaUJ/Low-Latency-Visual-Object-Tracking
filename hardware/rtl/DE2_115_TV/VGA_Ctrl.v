@@ -17,7 +17,9 @@ module	VGA_Ctrl	(	//	Host Side
 						oVGA_CLOCK,
 						//	Control Signal
 						iCLK,
-						iRST_N	);
+						iRST_N,
+						boundary_x,
+						boundary_y);
 //	Host Side
 input		[9:0]	iRed;
 input		[9:0]	iGreen;
@@ -37,7 +39,10 @@ output				oVGA_BLANK;
 output				oVGA_CLOCK;
 //	Control Signal
 input				iCLK;
-input				iRST_N;	
+input				iRST_N;
+input		[9:0]	boundary_x;
+input		[9:0]	boundary_y;
+
 //	Internal Registers
 reg			[10:0]	H_Cont;
 reg			[10:0]	V_Cont;
@@ -61,14 +66,33 @@ parameter	V_TOTAL	=	V_FRONT+V_SYNC+V_BACK+V_ACT;
 assign	oVGA_SYNC	=	1'b1;			//	This pin is unused.
 assign	oVGA_BLANK	=	~((H_Cont<H_BLANK)||(V_Cont<V_BLANK));
 assign	oVGA_CLOCK	=	~iCLK;
-assign	oVGA_R		=	iRed;
-assign	oVGA_G		=	iGreen;
-assign	oVGA_B		=	iBlue;
+
 assign	oAddress	=	oCurrent_Y*H_ACT+oCurrent_X;
 assign	oRequest	=	((H_Cont>=H_BLANK && H_Cont<H_TOTAL)	&&
 						 (V_Cont>=V_BLANK && V_Cont<V_TOTAL));
 assign	oCurrent_X	=	(H_Cont>=H_BLANK)	?	H_Cont-H_BLANK	:	11'h0	;
 assign	oCurrent_Y	=	(V_Cont>=V_BLANK)	?	V_Cont-V_BLANK	:	11'h0	;
+
+// ==========================================
+// 16x16 SQUARE DRAWING LOGIC
+// ==========================================
+// Check if the current pixel coordinate falls within the 16x16 boundary
+wire in_square = (oCurrent_X >= boundary_x && oCurrent_X < boundary_x + 1) &&
+                 (oCurrent_Y >= boundary_y && oCurrent_Y < boundary_y + 16) ||
+                                (oCurrent_X >= boundary_x && oCurrent_X < boundary_x + 16) &&
+                                (oCurrent_Y >= boundary_y && oCurrent_Y < boundary_y + 1) ||
+                                (oCurrent_X >= boundary_x + 15 && oCurrent_X < boundary_x + 16) &&
+                                (oCurrent_Y >= boundary_y && oCurrent_Y < boundary_y + 16) ||
+                                (oCurrent_X >= boundary_x && oCurrent_X < boundary_x + 16) &&
+                                (oCurrent_Y >= boundary_y + 15 && oCurrent_Y < boundary_y + 16);
+
+// Output the colors: If inside the square, paint it white (10'h3FF).
+// If outside the square but inside the active zone, show the host input color.
+// If outside the active zone, output black (10'h0).
+assign oVGA_R = (!oVGA_BLANK) ? 10'h0 : (in_square ? 10'h3FF : iRed);
+assign oVGA_G = (!oVGA_BLANK) ? 10'h0 : (in_square ? 10'h3FF : iGreen);
+assign oVGA_B = (!oVGA_BLANK) ? 10'h0 : (in_square ? 10'h3FF : iBlue);
+// ==========================================
 
 //	Horizontal Generator: Refer to the pixel clock
 always@(posedge iCLK or negedge iRST_N)

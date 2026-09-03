@@ -502,6 +502,13 @@ wire	[7:0]	Tmp3,Tmp4;
 
 wire            NTSC;
 wire            PAL;
+
+wire	[9:0]	boundary_x;
+wire	[9:0]	boundary_y;
+
+// just for debugging
+wire [31:0] debug_data;
+
 //=============================================================================
 // Structural coding
 //=============================================================================
@@ -544,6 +551,19 @@ assign	Tmp3	=	Tmp1[8:2]+m3YCbCr[7:1];
 assign	Tmp4	=	Tmp2[8:2]+m3YCbCr[15:9];
 assign	m5YCbCr	=	{Tmp4,Tmp3};
 
+// custom processing
+process_top process_top_inst (
+    .clk(TD_CLK27),
+    .rst_n(DLY0),
+    .Y(YCbCr[15:8]),
+    .data_valid_in(TV_DVAL),
+    .v_sync(TD_VS),
+    .TV_X(TV_X),
+    .boundary_x(boundary_x),
+    .boundary_y(boundary_y),
+	.debug_data(debug_data)
+);
+
 //	7 segment LUT
 SEG7_LUT_8 			u0	(	.oSEG0(HEX0),
 							.oSEG1(HEX1),
@@ -553,7 +573,7 @@ SEG7_LUT_8 			u0	(	.oSEG0(HEX0),
 							.oSEG5(HEX5),
 							.oSEG6(HEX6),
 							.oSEG7(HEX7),
-							.iDIG(SW) );
+							.iDIG(debug_data) );
 							
 //	TV Decoder Stable Check
 TD_Detect			u2	(	.oTD_Stable(TD_Stable),
@@ -687,7 +707,9 @@ VGA_Ctrl			u9	(	//	Host Side
 							.oVGA_CLOCK(VGA_CLK),
 							//	Control Signal
 							.iCLK(TD_CLK27),
-							.iRST_N(DLY2)	);
+							.iRST_N(DLY2),
+							.boundary_x(boundary_x),
+							.boundary_y(boundary_y));
 
 //	Line buffer, delay one line
 Line_Buffer u10	(	.aclr(!DLY0),
