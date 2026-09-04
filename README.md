@@ -69,3 +69,4 @@ The project is being developed incrementally:
 ## Project Goal
 
 The overall goal is to develop a **hardware-accelerated real-time object tracking pipeline** and evaluate how different tracking approaches trade off **tracking accuracy, computational complexity, memory usage, and FPGA resource utilization**.
+
