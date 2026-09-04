@@ -1,169 +1,71 @@
-# FPGA-Accelerated Object Tracking
+# FPGA-Based Real-Time Object Tracking
 
-An FPGA-based hardware accelerator for real-time object detection and tracking, developed as a semester project at the **University of Moratuwa, Department of Computer Science and Engineering**.
+A real-time visual tracking system implemented on an **Altera Cyclone IV FPGA** using the **DE2-115 development board**.
 
-The project explores how computationally intensive parts of an object tracking pipeline can be implemented directly in FPGA hardware to achieve lower latency and higher energy efficiency compared with a software-only implementation.
+The project aims to investigate how object tracking algorithms can be implemented and accelerated directly in FPGA hardware, starting from a lightweight template-matching approach and gradually exploring more adaptive tracking techniques.
 
-## Project Overview
+## Current Architecture
 
-Modern object detection and tracking algorithms can be computationally demanding, particularly when deployed on resource-constrained embedded platforms. This project investigates a hardware-accelerated approach in which selected stages of the vision pipeline are implemented using **SystemVerilog RTL** and executed directly on an FPGA.
-
-The initial implementation focuses on establishing a complete hardware video-processing pipeline and progressively introducing hardware acceleration for object tracking.
-
-### Current Pipeline
+The current system processes the luminance (`Y`) component of a video stream captured through the DE2-115's video input pipeline.
 
 ```text
-FPV Camera
-    │
-    ▼
-ADV7180 Video Decoder
-    │
-    ▼
-FPGA Video Input
-    │
-    ▼
-Image Processing / Feature Extraction
-    │
-    ▼
-Object Detection / Matching
-    │
-    ▼
-Object Tracking
-    │
-    ▼
-VGA Display
+                Camera
+                   │
+                   ▼
+            ADV7180 Decoder
+                   │
+                   ▼
+              Y (8-bit)
+                   │
+                   ▼
+        ┌─────────────────────┐
+        │  Template Matcher   │
+        │      (FPGA)         │
+        └─────────────────────┘
+                   │
+                   ▼
+          Bounding Box / Position
+                   │
+                   ▼
+              VGA Output
 ```
 
-## Objectives
+The template matcher operates directly on the incoming video stream and produces the estimated position of the tracked object. The resulting bounding box can then be overlaid on the video output.
 
-* Develop a real-time FPGA-based object tracking pipeline.
-* Interface an analog camera with the FPGA through the onboard **ADV7180 video decoder**.
-* Implement computationally intensive vision operations using RTL hardware.
-* Explore hardware architectures suitable for low-latency image processing.
-* Reduce dependence on a general-purpose processor for the vision pipeline.
-* Evaluate the performance and resource requirements of the hardware implementation.
-* Investigate architectures that can later be extended to neural-network-based object detection.
+## Development Plan
 
-## Hardware
+The project is being developed incrementally:
 
-The current implementation targets the **Terasic DE2-115 development board**.
+1. **Video Input**
 
-Key hardware components include:
+   * Capture a stable video stream from the analog camera.
+   * Extract and process the 8-bit luminance component.
 
-* FPGA: Intel/Altera Cyclone IV E
-* Analog video input through the onboard ADV7180 video decoder
-* VGA output
-* External FPV camera
-* On-board memory and FPGA resources for image processing
+2. **Basic Template Matching**
 
-## Software & Development Tools
+   * Implement a small template-based tracker in FPGA hardware.
+   * Develop the required line buffers, template storage, and matching logic.
+   * Produce the best-matching position for each frame.
 
-* SystemVerilog / Verilog
-* Intel Quartus Prime
-* ModelSim / QuestaSim
-* Python for experimentation and algorithm validation
-* Git
-* Linux development environment
+3. **Video Overlay**
 
-## Hardware Architecture
+   * Generate a bounding box around the detected object.
+   * Display the tracking result through the VGA output.
 
-The accelerator is being designed as a modular RTL system. Major components include:
+4. **Host ↔ FPGA Communication**
 
-* Video input interface
-* Video timing and synchronization
-* Image buffers
-* Feature extraction / matching units
-* Object tracking logic
-* Control unit
-* Memory interfaces
-* VGA output interface
+   * Add a communication interface between the FPGA and a host computer.
+   * Allow operations such as initializing/updating the template and transferring tracking information.
 
-The design is being developed with hardware parallelism in mind, allowing independent operations to execute concurrently rather than following the sequential execution model of a CPU.
+5. **Adaptive Tracking**
 
-## Development Approach
+   * Investigate methods for updating the template as the object changes.
+   * Compare different lightweight tracking strategies in terms of accuracy, hardware cost, and performance.
 
-The project is being developed incrementally.
+6. **Hardware Optimization**
 
-### 1. Video Input
+   * Explore parallelism, pipelining, memory organization, and other FPGA-specific optimizations to improve real-time performance.
 
-The first stage is to establish a reliable camera-to-FPGA pipeline using the DE2-115's analog video input and ADV7180 decoder.
+## Project Goal
 
-### 2. Video Output
-
-Decoded frames are processed by the FPGA and displayed through VGA. This provides a simple way to verify that the complete video path is functioning correctly.
-
-### 3. Basic Tracking
-
-A lightweight object matching/tracking algorithm is implemented first to establish a functional hardware tracking pipeline before introducing more computationally intensive models.
-
-### 4. Hardware Acceleration
-
-The computationally intensive sections of the algorithm are converted into RTL hardware blocks. The architecture is optimized for:
-
-* Parallel execution
-* Pipelining
-* Reduced memory access
-* Deterministic latency
-* Efficient FPGA resource utilization
-
-### 5. Evaluation
-
-The final implementation will be evaluated based on:
-
-* Processing latency
-* Frames per second
-* FPGA resource utilization
-* Memory requirements
-* Accuracy of tracking
-* Hardware/software performance comparison
-
-## Project Status
-
-The project is currently in the **hardware implementation and integration stage**.
-
-Current work includes:
-
-* [x] Initial FPGA development environment setup
-* [x] Investigation of the DE2-115 video input architecture
-* [x] Identification of the ADV7180 configuration requirements
-* [ ] Complete camera-to-FPGA video pipeline
-* [ ] VGA output integration
-* [ ] Hardware implementation of the initial tracking algorithm
-* [ ] Integration of tracking with the live video stream
-* [ ] FPGA resource and performance evaluation
-* [ ] Final optimization
-
-## Future Work
-
-Depending on the resource requirements and performance of the initial implementation, the project may be extended toward neural-network-based object detection and tracking.
-
-Potential future directions include:
-
-* Lightweight CNN acceleration
-* YOLO-based object detection
-* Template matching acceleration
-* Systolic-array-based neural-network computation
-* Hardware/software co-design
-* Reduced-precision arithmetic
-* Multi-object tracking
-* Fully pipelined streaming image processing
-
-<!-- ## Repository Structure
-
-```text
-.
-├── rtl/              # SystemVerilog RTL modules
-├── sim/              # Simulation files and testbenches
-├── constraints/      # FPGA pin and timing constraints
-├── software/         # Python/software reference implementations
-├── docs/             # Project documentation
-└── README.md
-``` -->
-
-## Academic Project
-
-**Semester Project**
-Department of Computer Science and Engineering
-University of Moratuwa, Sri Lanka
-
-The project investigates the design and implementation of a practical FPGA-based vision accelerator, with emphasis on **RTL design, hardware architecture, parallel processing, and real-time embedded vision**.
+The overall goal is to develop a **hardware-accelerated real-time object tracking pipeline** and evaluate how different tracking approaches trade off **tracking accuracy, computational complexity, memory usage, and FPGA resource utilization**.

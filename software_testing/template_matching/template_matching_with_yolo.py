@@ -21,7 +21,7 @@ CONFIDENCE_THRESHOLD = 0.60  # Minimum template combined score to update t_lates
 # YOLOE AI SUPERVISOR PARAMETERS
 # ==========================================
 PROMPT = "face"                     # Text prompt for the open-vocabulary model
-MODEL_WEIGHTS = "yoloe-26n-seg.pt"       # Nano model weights (downloads automatically)
+MODEL_WEIGHTS = "../yoloe-26n-seg.pt"       # Nano model weights (downloads automatically)
 POLL_INTERVAL = 90                 # Re-detect with AI every N frames (set to 0 to disable)
 LOW_CONFIDENCE_THRESHOLD = 0.40    # Re-detect with AI if template matching score drops below this
 
