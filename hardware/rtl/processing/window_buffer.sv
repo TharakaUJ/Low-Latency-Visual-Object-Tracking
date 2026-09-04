@@ -96,7 +96,7 @@ module window_buffer #(
     // you can add a frame_start pulse input if you want per-frame
     // re-validation without a full reset.
     // ------------------------------------------------------------
-    localparam int unsigned FILL_TARGET = IMG_W*(WIN-1) + WIN;
+    localparam int unsigned FILL_TARGET = (IMG_W+1)*(WIN-1) + WIN;
     logic [$clog2(FILL_TARGET+1)-1:0] fill_count;
 
     always_ff @(posedge clk or negedge rst_n) begin
