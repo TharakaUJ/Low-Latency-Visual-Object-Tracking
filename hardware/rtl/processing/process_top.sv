@@ -25,7 +25,7 @@ module process_top #(
     logic       window_valid;
 
     logic [9:0] pixel_count_d [WIN-1:0];
-    logic [8:0] line_count_d  [WIN-1:0];
+    logic [9:0] line_count_d  [WIN-1:0];
 
     logic v_sync_d;
     always_ff @(posedge clk or negedge rst_n) begin
@@ -42,7 +42,7 @@ module process_top #(
             pixel_count <= 10'd0;
             for (int i = 0; i < WIN; i++) begin
                 pixel_count_d[i] <= 10'd0;
-                line_count_d[i]  <= 9'd0;
+                line_count_d[i]  <= 10'd0;
             end
         end
         else if (frame_done) begin
