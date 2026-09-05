@@ -8,31 +8,56 @@
 module window_buffer #(
     parameter int WIN    = 3,     // window / template size (WIN x WIN)
     parameter int IMG_W  = 640,   // active pixels per line
+    parameter int IMG_H  = 480,   // active lines per frame
     parameter int DATA_W = 8
 )(
     input  logic clk,
     input  logic rst_n,
     input  logic clock_enable,                          // = data_valid_in
+    input  logic frame_done,                             // = process_top's v_sync-edge pulse; keeps
+                                                           // this module's own position counters in
+                                                           // lockstep with process_top's pixel_count/
+                                                           // line_count, which anchor_x/anchor_y below
+                                                           // are expressed in terms of.
     input  logic [DATA_W-1:0] data_in,
     output logic [DATA_W-1:0] window_out [WIN-1:0][WIN-1:0], // [row][col], row0 = newest line
-    output logic              window_valid                   // 1 once the window is fully populated
+    output logic              window_valid,                  // 1 once the window is fully populated
+    output logic [$clog2(IMG_W)-1:0] anchor_x,               // image (x,y) of window_out's TOP-LEFT
+    output logic [$clog2(IMG_H)-1:0] anchor_y                // corner (oldest row, oldest col), valid
+                                                               // the SAME cycle as window_out/window_valid
 );
 
     localparam int ADDR_W = $clog2(IMG_W);
+    localparam int LINE_W = $clog2(IMG_H);
 
     // ------------------------------------------------------------
-    // Column address for the line-buffer BRAMs. This is the buffer's
-    // own local counter; it does NOT need to match process_top's
-    // pixel_count value-for-value, it just needs to wrap every IMG_W
-    // enabled cycles, which it does the same way pixel_count does.
+    // Column/line address for the line-buffer BRAMs. Previously this
+    // was just a free-running col_addr with no line tracking and no
+    // frame_done reset, since all it had to do was wrap every IMG_W
+    // cycles for BRAM addressing. It now also tracks the current
+    // line and resets in lockstep with process_top's pixel_count/
+    // line_count (both driven by the same clock_enable/frame_done),
+    // so that anchor_x/anchor_y below come out expressed in exactly
+    // process_top's own (x,y) coordinate frame.
     // ------------------------------------------------------------
     logic [ADDR_W-1:0] col_addr;
+    logic [LINE_W-1:0] line_addr;
 
     always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n)
-            col_addr <= '0;
-        else if (clock_enable)
-            col_addr <= (col_addr == IMG_W-1) ? '0 : col_addr + 1'b1;
+        if (!rst_n) begin
+            col_addr  <= '0;
+            line_addr <= '0;
+        end else if (frame_done) begin
+            col_addr  <= '0;
+            line_addr <= '0;
+        end else if (clock_enable) begin
+            if (col_addr == IMG_W-1) begin
+                col_addr <= '0;
+                line_addr <= (line_addr == IMG_H-1) ? '0 : line_addr + 1'b1;
+            end else begin
+                col_addr <= col_addr + 1'b1;
+            end
+        end
     end
 
     // ------------------------------------------------------------
@@ -107,5 +132,38 @@ module window_buffer #(
     end
 
     assign window_valid = (fill_count >= FILL_TARGET);
+
+    // ------------------------------------------------------------
+    // anchor_x/anchor_y: the image position of window_out's oldest
+    // row / oldest column (win_reg[WIN-1][0]), i.e. the window's
+    // top-left corner, valid the same cycle as window_out itself.
+    //
+    // Nominally this position is just (WIN-1) columns left of, and
+    // (WIN-1) lines above, the pixel currently being written in
+    // (col_addr, line_addr) -- with wraparound at the frame edges.
+    // Computed arithmetically here instead of with a physical delay
+    // chain, since window_buffer already knows its own col_addr/
+    // line_addr and doesn't need to re-derive them by delaying a
+    // copy of process_top's pixel_count/line_count by a separate
+    // ~(WIN-1)*IMG_W-deep pipeline (which is what process_top was
+    // doing before, and which was wrong: it only delayed by WIN
+    // cycles, not (WIN-1)*IMG_W -- see tb_process_top's original
+    // FINDING for the details of that bug).
+    // ------------------------------------------------------------
+    logic col_borrow;
+    logic [ADDR_W-1:0] anchor_col_raw;
+    logic [LINE_W-1:0] line_after_borrow;
+
+    assign col_borrow = (col_addr < (WIN-1));
+    assign anchor_col_raw = col_borrow ? (ADDR_W'(IMG_W - (WIN-1)) + col_addr)
+                                        : (col_addr - ADDR_W'(WIN-1));
+    // Borrowing a column from the previous line also costs one line
+    // off the line index before applying the (WIN-1)-line offset.
+    assign line_after_borrow = col_borrow ? ((line_addr == '0) ? LINE_W'(IMG_H-1) : line_addr - 1'b1)
+                                           : line_addr;
+
+    assign anchor_x = anchor_col_raw;
+    assign anchor_y = (line_after_borrow >= (WIN-1)) ? (line_after_borrow - LINE_W'(WIN-1))
+                                                       : (LINE_W'(IMG_H - (WIN-1)) + line_after_borrow);
 
 endmodule

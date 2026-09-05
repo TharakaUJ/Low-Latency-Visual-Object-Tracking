@@ -39,11 +39,13 @@ module tb_template_match;
 
     localparam int WIN = 4;
     localparam int SAD_W = $clog2(WIN*WIN*255 + 1);
-
+    localparam int IMG_W  = 640;
+    localparam int IMG_H  = 480;
     logic clk = 0, rst_n;
     logic search_start, window_valid;
     logic [7:0] data_in [WIN-1:0][WIN-1:0];
-    logic [9:0] current_x, current_y;
+    logic [$clog2(IMG_W)-1:0] current_x;
+    logic [$clog2(IMG_H)-1:0] current_y;
     logic [9:0] temp_boundary_x, temp_boundary_y;
     logic [31:0] debug_data;
 
@@ -98,14 +100,15 @@ module tb_template_match;
         //    later, genuinely better match in step 5 has room to win.)
         // ------------------------------------------------------------
         set_window_uniform_diff(20); // total_sad = WIN*WIN*20 = 320
-        current_x = 10'd5; current_y = 10'd7;
+        current_x = ($clog2(IMG_W)-1)'(5);
+        current_y = ($clog2(IMG_H)-1)'(7);
         window_valid = 1;
         @(posedge clk); #1;
         if (extract_total_sad() !== SAD_W'(WIN*WIN*20)) begin
             $error("step2: total_sad=%0d expected %0d", extract_total_sad(), WIN*WIN*20);
             errors++;
         end
-        if (temp_boundary_x !== 10'd5 || temp_boundary_y !== 10'd7) begin
+        if (temp_boundary_x !== ($clog2(IMG_W)-1)'(5) || temp_boundary_y !== ($clog2(IMG_H)-1)'(7)) begin
             $error("step2 match not latched as new min: bx=%0d by=%0d expected (5,7)",
                     temp_boundary_x, temp_boundary_y);
             errors++;
@@ -116,9 +119,9 @@ module tb_template_match;
         //    overwrite the current best.
         // ------------------------------------------------------------
         set_window_uniform_diff(25); // total_sad = WIN*WIN*25 = 400, > 320 (step2's SAD)
-        current_x = 10'd6; current_y = 10'd7;
+        current_x = ($clog2(IMG_W)-1)'(6); current_y = ($clog2(IMG_H)-1)'(7);
         @(posedge clk); #1;
-        if (temp_boundary_x !== 10'd5 || temp_boundary_y !== 10'd7) begin
+        if (temp_boundary_x !== ($clog2(IMG_W)-1)'(5) || temp_boundary_y !== ($clog2(IMG_H)-1)'(7)) begin
             $error("worse match incorrectly overwrote boundary: bx=%0d by=%0d expected (5,7)",
                     temp_boundary_x, temp_boundary_y);
             errors++;
@@ -129,9 +132,9 @@ module tb_template_match;
         // ------------------------------------------------------------
         window_valid = 0;
         set_window(8'hFF);
-        current_x = 10'd99; current_y = 10'd99;
+        current_x = ($clog2(IMG_W)-1)'(99); current_y = ($clog2(IMG_H)-1)'(99);
         @(posedge clk); #1;
-        if (temp_boundary_x !== 10'd5 || temp_boundary_y !== 10'd7) begin
+        if (temp_boundary_x !== ($clog2(IMG_W)-1)'(5) || temp_boundary_y !== ($clog2(IMG_H)-1)'(7)) begin
             $error("update happened while window_valid=0: bx=%0d by=%0d expected (5,7)",
                     temp_boundary_x, temp_boundary_y);
             errors++;
@@ -145,9 +148,9 @@ module tb_template_match;
         //    template_match applies no internal delay of its own.
         // ------------------------------------------------------------
         set_window_uniform_diff(5); // total_sad = WIN*WIN*5 = 80, better than step2's 320
-        current_x = 10'd42; current_y = 10'd99;
+        current_x = ($clog2(IMG_W)-1)'(42); current_y = ($clog2(IMG_H)-1)'(99);
         @(posedge clk); #1;
-        if (temp_boundary_x !== 10'd42 || temp_boundary_y !== 10'd99) begin
+        if (temp_boundary_x !== ($clog2(IMG_W)-1)'(42) || temp_boundary_y !== ($clog2(IMG_H)-1)'(99)) begin
             $error("better match not latched: bx=%0d by=%0d expected (42,99)",
                     temp_boundary_x, temp_boundary_y);
             errors++;
@@ -166,11 +169,11 @@ module tb_template_match;
         //    is sitting on data_in (search_start must win the priority).
         // ------------------------------------------------------------
         set_window(8'hFF);
-        current_x = 10'd1; current_y = 10'd1;
+        current_x = ($clog2(IMG_W)-1)'(1); current_y = ($clog2(IMG_H)-1)'(1);
         search_start = 1;
         @(posedge clk); #1;
         search_start = 0;
-        if (temp_boundary_x !== 10'd0 || temp_boundary_y !== 10'd0) begin
+        if (temp_boundary_x !== ($clog2(IMG_W)-1)'(0) || temp_boundary_y !== ($clog2(IMG_H)-1)'(0)) begin
             $error("search_start did not reset boundary: bx=%0d by=%0d expected (0,0)",
                     temp_boundary_x, temp_boundary_y);
             errors++;
@@ -178,9 +181,9 @@ module tb_template_match;
 
         // Next cycle, that same perfect match is free to win again from
         // the fresh min_sad='1 baseline.
-        current_x = 10'd1; current_y = 10'd1;
+        current_x = ($clog2(IMG_W)-1)'(1); current_y = ($clog2(IMG_H)-1)'(1);
         @(posedge clk); #1;
-        if (temp_boundary_x !== 10'd1 || temp_boundary_y !== 10'd1) begin
+        if (temp_boundary_x !== ($clog2(IMG_W)-1)'(1) || temp_boundary_y !== ($clog2(IMG_H)-1)'(1)) begin
             $error("first post-search_start match not captured: bx=%0d by=%0d expected (1,1)",
                     temp_boundary_x, temp_boundary_y);
             errors++;
@@ -190,9 +193,9 @@ module tb_template_match;
         // 7) Equal SAD (tie) must NOT overwrite the existing best
         //    (strict '<' comparison, not '<=').
         // ------------------------------------------------------------
-        current_x = 10'd77; current_y = 10'd77; // same total_sad (0), different position
+        current_x = ($clog2(IMG_W)-1)'(77); current_y = ($clog2(IMG_H)-1)'(77); // same total_sad (0), different position
         @(posedge clk); #1;
-        if (temp_boundary_x !== 10'd1 || temp_boundary_y !== 10'd1) begin
+        if (temp_boundary_x !== ($clog2(IMG_W)-1)'(1) || temp_boundary_y !== ($clog2(IMG_H)-1)'(1)) begin
             $error("tie incorrectly overwrote boundary: bx=%0d by=%0d expected (1,1)",
                     temp_boundary_x, temp_boundary_y);
             errors++;

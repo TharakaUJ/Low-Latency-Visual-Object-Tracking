@@ -34,7 +34,7 @@
 // ============================================================
 module tb_process_top;
 
-    localparam int WIN   = 16;
+    localparam int WIN = 16; 
     localparam int IMG_W = 640;   // must match process_top's hardcoded window_buffer_inst.IMG_W
 
     logic clk = 0, rst_n;
@@ -101,13 +101,13 @@ module tb_process_top;
         // WIN cycles before calling them "current_x/current_y".
         // ------------------------------------------------------------
         cyc_now = hist_depth; // enabled cycles elapsed so far
-        rtl_current_x = dut.pixel_count_d[WIN-1];
-        rtl_current_y = dut.line_count_d[WIN-1];
+        rtl_current_x = dut.anchor_x;
+        rtl_current_y = dut.anchor_y;
 
         naive_expected_x = px_hist[cyc_now-1-WIN];
         naive_expected_y = py_hist[cyc_now-1-WIN];
 
-        $display("current_x/current_y as actually wired (pixel_count_d[WIN-1]) = (%0d, %0d)",
+        $display("current_x/current_y as actually wired (anchor_x/y)             = (%0d, %0d)",
                   rtl_current_x, rtl_current_y);
         $display("pixel_count/line_count from exactly WIN=%0d cycles ago         = (%0d, %0d)",
                   WIN, naive_expected_x, naive_expected_y);
@@ -147,39 +147,6 @@ module tb_process_top;
                       correct_delay_estimate);
             $display(" the delay-chain depth mismatch itself is already conclusive.)");
         end
-
-        $display("");
-        $display("========================================================================");
-        $display("FINDING: process_top's current_x/current_y delay chain is only WIN=%0d", WIN);
-        $display("cycles deep (pixel_count_d[0..WIN-1] / line_count_d[0..WIN-1]), but");
-        $display("window_buffer's window content needs roughly (WIN-1)*IMG_W = %0d cycles", correct_delay_estimate);
-        $display("of latency to build (each of the WIN-1 BRAM line_buffers stages the data");
-        $display("by ~IMG_W cycles -- see line_buffer.sv: 'the pixel that was at this column");
-        $display("exactly one line (IMG_W cycles) ago'). That is a difference of roughly");
-        $display("%0d cycles.", correct_delay_estimate - WIN);
-        $display("");
-        $display("Concretely: at the moment window_valid first asserts (frame position");
-        $display("~line %0d), current_x/current_y report a position only WIN=%0d cycles into",
-                   py_hist[hist_depth-1], WIN);
-        $display("the frame (essentially (x=%0d,y=%0d)), while the window itself is actually",
-                   naive_expected_x, naive_expected_y);
-        $display("built from image rows spanning the CURRENT line back to %0d lines above it.", WIN-1);
-        $display("boundary_x/boundary_y (whichever window_valid cycle wins the SAD search)");
-        $display("will therefore be reported at roughly the WRONG (x,y) -- off by up to");
-        $display("~(WIN-1) lines' worth of pixel_count wraparound, i.e. up to %0d pixel_count", (WIN-1)*IMG_W);
-        $display("counts, which given pixel_count only spans 0..639 per line means the");
-        $display("reported x is essentially meaningless relative to the actual matched window,");
-        $display("and the reported y will be stuck near line 0 for most of the frame instead");
-        $display("of tracking the true matched line.");
-        $display("");
-        $display("SUGGESTED FIX: make the pixel_count_d/line_count_d chain (WIN-1)*IMG_W + WIN");
-        $display("cycles deep to match window_buffer's true latency (same order as its own");
-        $display("FILL_TARGET/TRUE_SETTLE, see tb_window_buffer's FINDING for the exact");
-        $display("constant), OR -- far cheaper in registers -- have window_buffer itself export");
-        $display("an aligned (anchor_x, anchor_y) pair computed from its own col_addr/line");
-        $display("counters, since it already knows exactly which cycle its window settles on.");
-        $display("========================================================================");
-
         $finish;
     end
 

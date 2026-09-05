@@ -1,13 +1,15 @@
 module template_match #(
-    parameter int WIN = 16
+    parameter int WIN = 16,
+    parameter int IMG_W  = 640,
+    parameter int IMG_H  = 480
 )(
     input logic clk,
     input logic rst_n,
     input logic search_start,
     input logic window_valid,
     input logic [7:0] data_in [WIN-1:0][WIN-1:0],
-    input logic [9:0] current_x,
-    input logic [9:0] current_y,
+    input logic [$clog2(IMG_W)-1:0] current_x,
+    input logic [$clog2(IMG_H)-1:0] current_y,
     output logic [9:0] temp_boundary_x,
     output logic [9:0] temp_boundary_y,
     output logic [31:0] debug_data

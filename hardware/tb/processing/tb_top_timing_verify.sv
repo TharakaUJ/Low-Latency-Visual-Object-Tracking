@@ -2,7 +2,7 @@
 // ============================================================
 // tb_window_buffer
 // Checks:
-//   1. window_valid asserts exactly at fill_count == IMG_W*(WIN-1)+WIN
+//   1. window_valid asserts exactly at fill_count == (IMG_W+1)*(WIN-1)+WIN
 //      enabled cycles (not before, not late).
 //   2. Once valid, window_out[row][col] matches a reference "golden"
 //      image model: row 0 = current line, row WIN-1 = WIN-1 lines
@@ -92,7 +92,7 @@ module tb_window_buffer;
     // IMG_W cycles for the BRAM address to wrap back to the same column
     // (the "row above" delay) PLUS the buffer's own 1-cycle output
     // register -- so the true per-row latency is IMG_W+1, not IMG_W.
-    // (window_valid's FILL_TARGET = (IMG_W+1)*(WIN-1)+WIN undercounts this by
+    // (window_valid's FILL_TARGET = IMG_W*(WIN-1)+WIN undercounts this by
     // (WIN-2) cycles for WIN>=3 -- see the note printed at the end of this
     // testbench.)
     task automatic check_window(int last_line, int last_col, string tag);
@@ -114,12 +114,13 @@ module tb_window_buffer;
         end
     endtask
 
+    // FILL_TARGET here must track window_buffer's own fill-target formula
+    // exactly, since we're checking window_valid's assertion cycle against
+    // it. This now matches the corrected RTL:
+    //   localparam int unsigned FILL_TARGET = (IMG_W+1)*(WIN-1) + WIN;
+    // (previously IMG_W*(WIN-1)+WIN, which asserted window_valid (WIN-2)
+    // cycles too early -- see git history / the original review for why).
     localparam int FILL_TARGET = (IMG_W+1)*(WIN-1) + WIN;
-    // The RTL's own window_valid fill target. See the note above check_window:
-    // the true settle point (last cell of the oldest row, oldest column,
-    // free of any stale/X data) is later than this by (WIN-2) cycles,
-    // because each row_stream hop costs IMG_W+1 cycles, not IMG_W.
-    localparam int TRUE_SETTLE = (WIN-1)*(IMG_W+1) + WIN;
 
     initial begin
         rst_n = 0; clock_enable = 0; data_in = '0;
@@ -155,18 +156,10 @@ module tb_window_buffer;
                             $time, enabled_cycles, FILL_TARGET);
                     errors++;
                 end
-                // Only check exact pixel content once we're past TRUE_SETTLE;
-                // between FILL_TARGET and TRUE_SETTLE, window_valid is
-                // already high but the oldest corner(s) of the window can
-                // still carry stale/X data (see FINDING printed below) --
-                // that gap is reported separately, not as a per-cell error
-                // here, so it isn't drowned out by (WIN-2) cycles' worth of
-                // repeated mismatches on the same known issue.
-                if (enabled_cycles >= TRUE_SETTLE)
-                    check_window(this_line, this_col, $sformatf("cyc=%0d", enabled_cycles));
-                else if (enabled_cycles == FILL_TARGET)
-                    $display("NOTE: window_valid asserted at cyc=%0d; window content not fully settled until cyc=%0d (see FINDING at end of log)",
-                              FILL_TARGET, TRUE_SETTLE);
+                // Content is expected to be fully settled from the very
+                // cycle window_valid asserts now that FILL_TARGET matches
+                // the true settle point (no more early-assert gap).
+                check_window(this_line, this_col, $sformatf("cyc=%0d", enabled_cycles));
             end
         end
 
@@ -230,26 +223,6 @@ module tb_window_buffer;
             $display("TB_WINDOW_BUFFER: PASS (all checks ok)");
         else
             $display("TB_WINDOW_BUFFER: FAIL (%0d errors)", errors);
-
-        if (TRUE_SETTLE > FILL_TARGET) begin
-            $display("");
-            $display("FINDING: window_buffer.window_valid asserts %0d cycle(s) too early.",
-                       TRUE_SETTLE - FILL_TARGET);
-            $display("  FILL_TARGET (used by RTL)      = IMG_W*(WIN-1) + WIN         = %0d", FILL_TARGET);
-            $display("  Actual settle point (measured) = (WIN-1)*(IMG_W+1) + WIN     = %0d", TRUE_SETTLE);
-            $display("  Root cause: each row_stream[] hop through one line_buffer costs");
-            $display("  IMG_W+1 cycles (IMG_W for the BRAM address to wrap back to the same");
-            $display("  column, +1 for line_buffer's own output register), but FILL_TARGET's");
-            $display("  formula only budgets IMG_W cycles per row. For WIN rows deep, that is");
-            $display("  (WIN-2) cycles short (0 for WIN<=2, growing with WIN).");
-            $display("  Impact: for (WIN-2) cycles after window_valid first asserts each frame,");
-            $display("  the oldest row(s)/leftmost column(s) of window_out can still hold stale");
-            $display("  data from the previous frame (or X at power-up), silently polluting");
-            $display("  template_match's SAD sum during that window.");
-            $display("  Suggested fix: change window_buffer's FILL_TARGET to");
-            $display("    localparam int unsigned FILL_TARGET = (IMG_W+1)*(WIN-1) + WIN;");
-            $display("  (i.e. add (WIN-2) cycles of margin), and re-check the fill_count width.");
-        end
 
         $finish;
     end
