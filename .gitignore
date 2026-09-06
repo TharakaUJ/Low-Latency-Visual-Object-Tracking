@@ -12,5 +12,20 @@ Quartus/
 
 hardware/build/
 
+# Nios II app build outputs
+hardware/software/app/CMakeCache.txt
+hardware/software/app/CMakeFiles/
+hardware/software/app/Makefile
+hardware/software/app/cmake_install.cmake
+hardware/software/app/*.elf
+hardware/software/app/*.elf.objdump
+hardware/software/app/*.hex
+hardware/software/app/*.stack_report
+hardware/software/app/bsp/
+hardware/software/bsp/CMakeFiles/
+hardware/software/bsp/Makefile
+hardware/software/bsp/cmake_install.cmake
+hardware/software/bsp/libhal2_bsp.a
+
 *.pyc
 **/__pycache__/

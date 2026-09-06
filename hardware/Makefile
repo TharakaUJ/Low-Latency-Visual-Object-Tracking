@@ -4,7 +4,7 @@ BUILD_DIR := build
 TEST_FILE := tests/$(TEST).f
 OUTPUT := $(BUILD_DIR)/$(TEST).vvp
 
-.PHONY: sim run clean
+.PHONY: sim run clean firmware
 
 sim:
 	mkdir -p $(BUILD_DIR)
@@ -15,6 +15,9 @@ run: sim
 
 clean:
 	rm -rf $(BUILD_DIR)
+
+firmware:
+	$(MAKE) -C software firmware
 
 sim_all:
 	@for test in $(shell ls tests/*.f); do \

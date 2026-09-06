@@ -70,3 +70,13 @@ The project is being developed incrementally:
 
 The overall goal is to develop a **hardware-accelerated real-time object tracking pipeline** and evaluate how different tracking approaches trade off **tracking accuracy, computational complexity, memory usage, and FPGA resource utilization**.
 
+## Firmware Flow
+
+The Nios V firmware lives under [hardware/software](hardware/software/README.md). The short version is:
+
+```bash
+niosv-bsp -c --type=hal --sopcinfo=$HOME/Documents/Low-Latency-Visual-Object-Tracking/hardware/rtl/soc_system/microcontroller.sopcinfo $HOME/Documents/Low-Latency-Visual-Object-Tracking/hardware/software/bsp/settings.bsp
+niosv-app --app-dir=$HOME/Documents/Low-Latency-Visual-Object-Tracking/hardware/software/app --bsp-dir=$HOME/Documents/Low-Latency-Visual-Object-Tracking/hardware/software/bsp --srcs=$HOME/Documents/Low-Latency-Visual-Object-Tracking/hardware/software/src/main.c
+niosv-download -g app.elf -i 0 -d 0 -c 1
+```
+
