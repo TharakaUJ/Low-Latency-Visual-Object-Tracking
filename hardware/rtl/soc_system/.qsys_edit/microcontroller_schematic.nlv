@@ -10,11 +10,11 @@ preplace inst microcontroller.intel_niosv_m_0.timer_module -pg 1
 preplace inst microcontroller.intel_niosv_m_0.clock_bridge -pg 1
 preplace inst microcontroller.intel_niosv_m_0.reset_bridge -pg 1
 preplace inst microcontroller.jtag_uart_0 -pg 1 -lvl 3 -y 120
+preplace netloc INTERCONNECT<net_container>microcontroller</net_container>(MASTER)intel_niosv_m_0.data_manager,(SLAVE)jtag_uart_0.avalon_jtag_slave,(MASTER)intel_niosv_m_0.instruction_manager,(SLAVE)onchip_memory2_0.s1,(SLAVE)intel_niosv_m_0.timer_sw_agent,(SLAVE)intel_niosv_m_0.dm_agent) 1 1 2 270 240 650
 preplace netloc EXPORT<net_container>microcontroller</net_container>(SLAVE)microcontroller.reset,(SLAVE)clk_0.clk_in_reset) 1 0 1 NJ
-preplace netloc FAN_OUT<net_container>microcontroller</net_container>(SLAVE)intel_niosv_m_0.clk,(SLAVE)onchip_memory2_0.clk1,(MASTER)clk_0.clk,(SLAVE)jtag_uart_0.clk) 1 1 2 270 50 610
-preplace netloc INTERCONNECT<net_container>microcontroller</net_container>(MASTER)intel_niosv_m_0.instruction_manager,(SLAVE)jtag_uart_0.avalon_jtag_slave,(SLAVE)intel_niosv_m_0.dm_agent,(SLAVE)onchip_memory2_0.s1,(SLAVE)intel_niosv_m_0.timer_sw_agent,(MASTER)intel_niosv_m_0.data_manager) 1 1 2 270 240 650
-preplace netloc POINT_TO_POINT<net_container>microcontroller</net_container>(MASTER)intel_niosv_m_0.platform_irq_rx,(SLAVE)jtag_uart_0.irq) 1 2 1 590
+preplace netloc FAN_OUT<net_container>microcontroller</net_container>(SLAVE)jtag_uart_0.reset,(SLAVE)intel_niosv_m_0.reset,(MASTER)clk_0.clk_reset,(SLAVE)onchip_memory2_0.reset1) 1 1 2 250 70 630
+preplace netloc POINT_TO_POINT<net_container>microcontroller</net_container>(SLAVE)jtag_uart_0.irq,(MASTER)intel_niosv_m_0.platform_irq_rx) 1 2 1 590
 preplace netloc EXPORT<net_container>microcontroller</net_container>(SLAVE)clk_0.clk_in,(SLAVE)microcontroller.clk) 1 0 1 NJ
-preplace netloc FAN_OUT<net_container>microcontroller</net_container>(SLAVE)onchip_memory2_0.reset1,(MASTER)clk_0.clk_reset,(SLAVE)jtag_uart_0.reset,(SLAVE)intel_niosv_m_0.reset) 1 1 2 250 70 630
+preplace netloc FAN_OUT<net_container>microcontroller</net_container>(MASTER)clk_0.clk,(SLAVE)onchip_memory2_0.clk1,(SLAVE)intel_niosv_m_0.clk,(SLAVE)jtag_uart_0.clk) 1 1 2 270 50 610
 levelinfo -pg 1 0 50 860
 levelinfo -hier microcontroller 60 90 390 710 850

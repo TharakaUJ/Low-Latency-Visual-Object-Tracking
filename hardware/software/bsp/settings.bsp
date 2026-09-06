@@ -2,12 +2,12 @@
 <sch:Settings xmlns:sch="http://www.altera.com/embeddedsw/bsp/schema">
         <BspType>hal2</BspType>
         <BspVersion>default</BspVersion>
-        <BspGeneratedTimeStamp>Sep 6, 2026 4:47:23 PM</BspGeneratedTimeStamp>
-        <BspGeneratedUnixTimeStamp>1788693443220</BspGeneratedUnixTimeStamp>
+        <BspGeneratedTimeStamp>Sep 6, 2026 7:22:39 PM</BspGeneratedTimeStamp>
+        <BspGeneratedUnixTimeStamp>1788702759169</BspGeneratedUnixTimeStamp>
         <BspGeneratedLocation>/home/tharaka/Documents/Low-Latency-Visual-Object-Tracking/hardware/software/bsp</BspGeneratedLocation>
         <BspSettingsFile>/home/tharaka/Documents/Low-Latency-Visual-Object-Tracking/hardware/software/bsp/settings.bsp</BspSettingsFile>
         <SopcDesignFile>/home/tharaka/Documents/Low-Latency-Visual-Object-Tracking/hardware/rtl/soc_system/microcontroller.sopcinfo</SopcDesignFile>
-        <SystemFileHash>7449cfb8f963e7db5d7a3e238e5705b94af804732e183bdc44c89f718cbfa3c</SystemFileHash>
+        <SystemFileHash>556fe51815dbf841b0a5cdbdb09e2adf41b03ed41ba16f1e054c0957571</SystemFileHash>
         <JdiFile>default</JdiFile>
         <Cpu>intel_niosv_m_0</Cpu>
         <SchemaVersion>1.9</SchemaVersion>
@@ -601,8 +601,8 @@
         </Setting>
         <MemoryMap>
                 <slaveDescriptor>onchip_memory2_0</slaveDescriptor>
-                <addressRange>0x00000000 - 0x00000FFF</addressRange>
-                <addressSpan>4096</addressSpan>
+                <addressRange>0x00000000 - 0x0000EFFF</addressRange>
+                <addressSpan>61440</addressSpan>
                 <attributes>memory</attributes>
         </MemoryMap>
         <MemoryMap>

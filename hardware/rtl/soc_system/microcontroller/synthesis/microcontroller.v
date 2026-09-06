@@ -40,7 +40,7 @@ module microcontroller (
 	wire  [31:0] mm_interconnect_0_intel_niosv_m_0_dm_agent_writedata;           // mm_interconnect_0:intel_niosv_m_0_dm_agent_writedata -> intel_niosv_m_0:dm_agent_writedata
 	wire         mm_interconnect_0_onchip_memory2_0_s1_chipselect;               // mm_interconnect_0:onchip_memory2_0_s1_chipselect -> onchip_memory2_0:chipselect
 	wire  [31:0] mm_interconnect_0_onchip_memory2_0_s1_readdata;                 // onchip_memory2_0:readdata -> mm_interconnect_0:onchip_memory2_0_s1_readdata
-	wire   [9:0] mm_interconnect_0_onchip_memory2_0_s1_address;                  // mm_interconnect_0:onchip_memory2_0_s1_address -> onchip_memory2_0:address
+	wire  [13:0] mm_interconnect_0_onchip_memory2_0_s1_address;                  // mm_interconnect_0:onchip_memory2_0_s1_address -> onchip_memory2_0:address
 	wire   [3:0] mm_interconnect_0_onchip_memory2_0_s1_byteenable;               // mm_interconnect_0:onchip_memory2_0_s1_byteenable -> onchip_memory2_0:byteenable
 	wire         mm_interconnect_0_onchip_memory2_0_s1_write;                    // mm_interconnect_0:onchip_memory2_0_s1_write -> onchip_memory2_0:write
 	wire  [31:0] mm_interconnect_0_onchip_memory2_0_s1_writedata;                // mm_interconnect_0:onchip_memory2_0_s1_writedata -> onchip_memory2_0:writedata

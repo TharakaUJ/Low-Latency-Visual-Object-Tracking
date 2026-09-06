@@ -39,6 +39,7 @@ set(CMAKE_MAKEFILE_DEPENDS
   "/opt/intelFPGA_lite/riscfree/build_tools/cmake/share/cmake-3.31/Modules/CMakeTestCCompiler.cmake"
   "/opt/intelFPGA_lite/riscfree/build_tools/cmake/share/cmake-3.31/Modules/CMakeTestCXXCompiler.cmake"
   "/opt/intelFPGA_lite/riscfree/build_tools/cmake/share/cmake-3.31/Modules/CMakeTestCompilerCommon.cmake"
+  "/opt/intelFPGA_lite/riscfree/build_tools/cmake/share/cmake-3.31/Modules/CMakeUnixFindMake.cmake"
   "/opt/intelFPGA_lite/riscfree/build_tools/cmake/share/cmake-3.31/Modules/Compiler/ADSP-DetermineCompiler.cmake"
   "/opt/intelFPGA_lite/riscfree/build_tools/cmake/share/cmake-3.31/Modules/Compiler/ARMCC-DetermineCompiler.cmake"
   "/opt/intelFPGA_lite/riscfree/build_tools/cmake/share/cmake-3.31/Modules/Compiler/ARMClang-DetermineCompiler.cmake"

@@ -70,7 +70,7 @@ CMakeFiles/create-hex: onchip_memory2_0.hex
 
 onchip_memory2_0.hex: app.elf
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --blue --bold --progress-dir=/workspace/app/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Creating onchip_memory2_0.hex."
-	elf2hex app.elf -o onchip_memory2_0.hex -b 0x00000000 -w 32 -e 0x00000FFF -r 4
+	elf2hex app.elf -o onchip_memory2_0.hex -b 0x00000000 -w 32 -e 0x0000EFFF -r 4
 
 CMakeFiles/create-hex.dir/codegen:
 .PHONY : CMakeFiles/create-hex.dir/codegen

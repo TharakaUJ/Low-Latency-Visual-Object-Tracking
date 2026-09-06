@@ -44,10 +44,10 @@
 
 module microcontroller_mm_interconnect_0_router_default_decode
   #(
-     parameter DEFAULT_CHANNEL = 1,
+     parameter DEFAULT_CHANNEL = 2,
                DEFAULT_WR_CHANNEL = -1,
                DEFAULT_RD_CHANNEL = -1,
-               DEFAULT_DESTID = 0 
+               DEFAULT_DESTID = 3 
    )
   (output [90 - 89 : 0] default_destination_id,
    output [4-1 : 0] default_wr_channel,
@@ -134,7 +134,7 @@ module microcontroller_mm_interconnect_0_router
     // Figure out the number of bits to mask off for each slave span
     // during address decoding
     // -------------------------------------------------------
-    localparam PAD0 = log2ceil(64'h1000 - 64'h0); 
+    localparam PAD0 = log2ceil(64'h10000 - 64'h0); 
     localparam PAD1 = log2ceil(64'h20000 - 64'h10000); 
     localparam PAD2 = log2ceil(64'h20040 - 64'h20000); 
     localparam PAD3 = log2ceil(64'h21008 - 64'h21000); 
@@ -191,7 +191,7 @@ module microcontroller_mm_interconnect_0_router
         // Sets the channel and destination ID based on the address
         // --------------------------------------------------
 
-    // ( 0x0 .. 0x1000 )
+    // ( 0x0 .. 0x10000 )
     if ( {address[RG:PAD0],{PAD0{1'b0}}} == 18'h0   ) begin
             src_channel = 4'b0100;
             src_data[PKT_DEST_ID_H:PKT_DEST_ID_L] = 3;

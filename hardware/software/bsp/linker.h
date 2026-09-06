@@ -4,7 +4,7 @@
  * Machine generated for CPU 'intel_niosv_m_0' in SOPC Builder design 'microcontroller'
  * SOPC Builder design path: /home/tharaka/Documents/Low-Latency-Visual-Object-Tracking/hardware/rtl/soc_system/microcontroller.sopcinfo
  *
- * Generated: Sun Sep 06 16:47:23 IST 2026
+ * Generated: Sun Sep 06 19:22:39 IST 2026
  */
 
 /*
@@ -66,7 +66,7 @@
  */
 
 #define ONCHIP_MEMORY2_0_REGION_BASE 0x20
-#define ONCHIP_MEMORY2_0_REGION_SPAN 4064
+#define ONCHIP_MEMORY2_0_REGION_SPAN 61408
 #define RESET_REGION_BASE 0x0
 #define RESET_REGION_SPAN 32
 

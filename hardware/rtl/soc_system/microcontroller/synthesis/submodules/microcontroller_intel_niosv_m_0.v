@@ -56,7 +56,7 @@ module microcontroller_intel_niosv_m_0 (
 		.HARTID          (32'b00000000000000000000000000000000),
 		.CORE_EXTN       (256),
 		.DEBUG_ENABLED   (1),
-		.DEVICE_FAMILY   ("Cyclone V"),
+		.DEVICE_FAMILY   ("Cyclone IV E"),
 		.USE_RESET_REQ   (0),
 		.ECC_EN          (0),
 		.ECC_FULL        (0),
@@ -113,7 +113,7 @@ module microcontroller_intel_niosv_m_0 (
 	niosv_dm_top #(
 		.DEBUG_RESET_EN (0),
 		.FPU_EN         (0),
-		.DEVICE_FAMILY  ("Cyclone V")
+		.DEVICE_FAMILY  ("Cyclone IV E")
 	) dbg_mod (
 		.clk                (clk),                      //           clk.clk
 		.reset              (reset_reset),              //         reset.reset

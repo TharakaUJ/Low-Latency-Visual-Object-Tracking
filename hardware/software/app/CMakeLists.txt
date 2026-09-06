@@ -58,7 +58,7 @@ add_custom_target(niosv-stack-report ALL DEPENDS "${stack_report_file}")
 add_custom_command(
     OUTPUT "onchip_memory2_0.hex"
     DEPENDS app.elf
-    COMMAND elf2hex app.elf -o onchip_memory2_0.hex -b 0x00000000 -w 32 -e 0x00000FFF -r 4
+    COMMAND elf2hex app.elf -o onchip_memory2_0.hex -b 0x00000000 -w 32 -e 0x0000EFFF -r 4
     COMMENT "Creating onchip_memory2_0.hex."
     VERBATIM
 )

@@ -1,0 +1,16 @@
+bsp/CMakeFiles/hal2_bsp.dir/HAL/src/alt_env_lock.c.obj: \
+ /workspace/bsp/HAL/src/alt_env_lock.c \
+ /opt/intelFPGA_lite/riscfree/toolchain/riscv32-unknown-elf/riscv32-unknown-elf/include/reent.h \
+ /opt/intelFPGA_lite/riscfree/toolchain/riscv32-unknown-elf/riscv32-unknown-elf/include/sys/reent.h \
+ /opt/intelFPGA_lite/riscfree/toolchain/riscv32-unknown-elf/riscv32-unknown-elf/include/_ansi.h \
+ /opt/intelFPGA_lite/riscfree/toolchain/riscv32-unknown-elf/riscv32-unknown-elf/include/newlib.h \
+ /opt/intelFPGA_lite/riscfree/toolchain/riscv32-unknown-elf/riscv32-unknown-elf/include/_newlib_version.h \
+ /opt/intelFPGA_lite/riscfree/toolchain/riscv32-unknown-elf/riscv32-unknown-elf/include/sys/config.h \
+ /opt/intelFPGA_lite/riscfree/toolchain/riscv32-unknown-elf/riscv32-unknown-elf/include/machine/ieeefp.h \
+ /opt/intelFPGA_lite/riscfree/toolchain/riscv32-unknown-elf/riscv32-unknown-elf/include/sys/features.h \
+ /opt/intelFPGA_lite/riscfree/toolchain/riscv32-unknown-elf/lib/gcc/riscv32-unknown-elf/13.2.0/include/stddef.h \
+ /opt/intelFPGA_lite/riscfree/toolchain/riscv32-unknown-elf/riscv32-unknown-elf/include/sys/cdefs.h \
+ /opt/intelFPGA_lite/riscfree/toolchain/riscv32-unknown-elf/riscv32-unknown-elf/include/machine/_default_types.h \
+ /opt/intelFPGA_lite/riscfree/toolchain/riscv32-unknown-elf/riscv32-unknown-elf/include/sys/_types.h \
+ /opt/intelFPGA_lite/riscfree/toolchain/riscv32-unknown-elf/riscv32-unknown-elf/include/machine/_types.h \
+ /opt/intelFPGA_lite/riscfree/toolchain/riscv32-unknown-elf/riscv32-unknown-elf/include/sys/lock.h

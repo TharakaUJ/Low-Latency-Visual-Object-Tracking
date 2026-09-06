@@ -4,7 +4,7 @@
  * Machine generated for CPU 'intel_niosv_m_0' in SOPC Builder design 'microcontroller'
  * SOPC Builder design path: /home/tharaka/Documents/Low-Latency-Visual-Object-Tracking/hardware/rtl/soc_system/microcontroller.sopcinfo
  *
- * Generated: Sun Sep 06 16:47:23 IST 2026
+ * Generated: Sun Sep 06 19:22:39 IST 2026
  */
 
 /*
@@ -123,7 +123,7 @@
  *
  */
 
-#define ALT_DEVICE_FAMILY "Cyclone V"
+#define ALT_DEVICE_FAMILY "Cyclone IV E"
 #define ALT_ENHANCED_INTERRUPT_API_PRESENT
 #define ALT_IRQ_BASE NULL
 #define ALT_LOG_PORT "/dev/null"
@@ -283,8 +283,8 @@
 #define ONCHIP_MEMORY2_0_READ_DURING_WRITE_MODE "DONT_CARE"
 #define ONCHIP_MEMORY2_0_SINGLE_CLOCK_OP 0
 #define ONCHIP_MEMORY2_0_SIZE_MULTIPLE 1
-#define ONCHIP_MEMORY2_0_SIZE_VALUE 4096
-#define ONCHIP_MEMORY2_0_SPAN 4096
+#define ONCHIP_MEMORY2_0_SIZE_VALUE 61440
+#define ONCHIP_MEMORY2_0_SPAN 61440
 #define ONCHIP_MEMORY2_0_TYPE "altera_avalon_onchip_memory2"
 #define ONCHIP_MEMORY2_0_WRITABLE 1
 
