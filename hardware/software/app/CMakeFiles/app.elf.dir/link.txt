@@ -1,0 +1,1 @@
+/opt/intelFPGA_lite/riscfree/toolchain/riscv32-unknown-elf/bin/riscv32-unknown-elf-gcc -g -march=rv32i -mabi=ilp32 -nostdlib CMakeFiles/app.elf.dir/workspace/src/main.c.obj -o app.elf  -T /workspace/bsp/linker.x -nostdlib -Wl,--start-group bsp/libhal2_bsp.a -lc -lstdc++ -lgcc -lm -Wl,--end-group
