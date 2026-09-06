@@ -1,0 +1,23 @@
+FROM ubuntu:22.04
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install GNU Make, CMake, and the standard RISC-V Bare-Metal Toolchain
+RUN apt-get update && apt-get install -y \
+    make \
+    cmake \
+    gcc-riscv64-unknown-elf \
+    p11-kit \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up the exact paths Nios V shell looks for
+ENV QUARTUS_ROOTDIR=/opt/intelFPGA_lite/quartus
+ENV PATH="${QUARTUS_ROOTDIR}/bin:${PATH}"
+
+# Default working directory inside the container
+WORKDIR /workspace
+
+# Start inside the Nios V shell automatically
+CMD ["/opt/intelFPGA_lite/quartus/bin/niosv-shell"]
