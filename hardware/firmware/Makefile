@@ -6,9 +6,11 @@
 #   <IntelFPGA installation>/quartus
 #
 # Example:
-#   export QUARTUS_ROOTDIR=$HOME/intelFPGA_lite/25.3/quartus
+#   export QUARTUS_ROOTDIR=$HOME/src/Quartus/Installation/quartus
+
 #
 HOST_INSTALL_PATH := $(abspath $(QUARTUS_ROOTDIR)/..)
+NIOSV_ROOT := $(HOST_INSTALL_PATH)/niosv
 PROJECT_ROOT := $(abspath ../..)
 BSP_DIR := $(abspath ./bsp)
 APP_DIR := $(abspath ./app)
