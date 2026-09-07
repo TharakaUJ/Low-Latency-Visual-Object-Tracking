@@ -17,7 +17,7 @@ clean:
 	rm -rf $(BUILD_DIR)
 
 firmware:
-	$(MAKE) -C software firmware
+	$(MAKE) -C firmware firmware
 
 sim_all:
 	@for test in $(shell ls tests/*.f); do \

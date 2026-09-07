@@ -1,9 +1,0 @@
-/workspace/app/CMakeFiles/app.elf.dir
-/workspace/app/CMakeFiles/create-objdump.dir
-/workspace/app/CMakeFiles/niosv-stack-report.dir
-/workspace/app/CMakeFiles/create-hex.dir
-/workspace/app/CMakeFiles/edit_cache.dir
-/workspace/app/CMakeFiles/rebuild_cache.dir
-/workspace/app/bsp/CMakeFiles/hal2_bsp.dir
-/workspace/app/bsp/CMakeFiles/edit_cache.dir
-/workspace/app/bsp/CMakeFiles/rebuild_cache.dir
