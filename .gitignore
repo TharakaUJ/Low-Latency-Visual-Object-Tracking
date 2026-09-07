@@ -12,5 +12,9 @@ Quartus/
 
 hardware/build/
 
+# Nios II app build outputs
+hardware/software/app/*
+hardware/software/bsp/*
+
 *.pyc
 **/__pycache__/

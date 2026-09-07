@@ -1,0 +1,27 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    make \
+    cmake \
+    p11-kit \
+    libglib2.0-0 \
+    libfreetype6 \
+    libfontconfig1 \
+    libxrender1 \
+    libxtst6 \
+    libxi6 \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV QUARTUS_ROOTDIR=/opt/intelFPGA_lite/quartus
+
+ENV PATH="/opt/intelFPGA_lite/niosv/bin:\
+/opt/intelFPGA_lite/riscfree/build_tools/bin:\
+/opt/intelFPGA_lite/riscfree/build_tools/cmake/bin:\
+/opt/intelFPGA_lite/riscfree/toolchain/riscv32-unknown-elf/bin:\
+/opt/intelFPGA_lite/quartus/bin64:${PATH}"
+
+WORKDIR /workspace
+
+CMD ["/opt/intelFPGA_lite/niosv/bin/niosv-shell"]
