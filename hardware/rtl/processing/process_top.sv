@@ -4,7 +4,16 @@ module process_top #(
     parameter int IMG_H  = 480
 )(
     input logic clk,
+    input logic clk_50,
     input logic rst_n,
+
+    // avalon slave interface
+    input logic [1:0] avs_address,
+    input logic avs_read,
+    output logic [31:0] avs_readdata,
+    input logic avs_write,
+    input logic [31:0] avs_writedata,
+    output logic avs_waitrequest,
 
     input logic [7:0] Y,
     input logic data_valid_in,
@@ -93,4 +102,19 @@ module process_top #(
         .debug_data      (debug_data)
     );
 
+    avalon_slave_bounds #(
+        .DATA_WIDTH (32),
+        .ADDR_WIDTH (2)
+    ) avalon_slave_bounds_inst (
+        .clk          (clk_50),
+        .reset        (~rst_n),
+        .avs_address  (avs_address),
+        .avs_read     (avs_read),
+        .avs_readdata (avs_readdata),
+        .avs_write    (avs_write),
+        .avs_writedata(avs_writedata),
+        .avs_waitrequest(avs_waitrequest),
+        .bound_x      (boundary_x),
+        .bound_y      (boundary_y)
+    );
 endmodule

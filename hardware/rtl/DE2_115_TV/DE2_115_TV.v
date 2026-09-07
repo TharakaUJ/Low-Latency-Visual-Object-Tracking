@@ -50,6 +50,8 @@ module DE2_115_TV
 		CLOCK3_50,
 		ENETCLK_25,
 
+		reset_n,
+
 		//////// Sma //////////
 		SMA_CLKIN,
 		SMA_CLKOUT,
@@ -235,7 +237,15 @@ module DE2_115_TV
 //	//	HSMC_TX_D_N,
 //		HSMC_TX_D_P,
 		//////// EXTEND IO //////////
-		EX_IO	
+		EX_IO,
+
+		// avalon interface
+		avs_address,
+		avs_read,
+		avs_readdata,
+		avs_write,
+		avs_writedata,
+		avs_waitrequest	
 	   
 	);
 
@@ -252,6 +262,8 @@ input		          		CLOCK_50;
 input		          		CLOCK2_50;
 input		          		CLOCK3_50;
 input		          		ENETCLK_25;
+
+input						reset_n;
 
 //////////// Sma //////////
 input		          		SMA_CLKIN;
@@ -509,6 +521,14 @@ wire	[9:0]	boundary_y;
 // just for debugging
 wire [31:0] debug_data;
 
+//	Avalon-MM slave interface (from Platform Designer master)
+input			[1:0]	avs_address;
+input					avs_read;
+output			[31:0]	avs_readdata;
+input					avs_write;
+input			[31:0]	avs_writedata;
+output					avs_waitrequest;
+
 //=============================================================================
 // Structural coding
 //=============================================================================
@@ -554,7 +574,16 @@ assign	m5YCbCr	=	{Tmp4,Tmp3};
 // custom processing
 process_top process_top_inst (
     .clk(TD_CLK27),
-    .rst_n(DLY0),
+    .clk_50(CLOCK_50),
+    .rst_n(reset_n),
+
+    .avs_address    (avs_address),
+    .avs_read       (avs_read),
+    .avs_readdata   (avs_readdata),
+    .avs_write      (avs_write),
+    .avs_writedata  (avs_writedata),
+    .avs_waitrequest(avs_waitrequest),
+
     .Y(YCbCr[15:8]),
     .data_valid_in(TV_DVAL),
     .v_sync(TD_VS),
@@ -581,7 +610,7 @@ TD_Detect			u2	(	.oTD_Stable(TD_Stable),
 							.oPAL(PAL),
 							.iTD_VS(TD_VS),
 							.iTD_HS(TD_HS),
-							.iRST_N(KEY[0])	);
+							.iRST_N(reset_n)	);
 
 //	Reset Delay Timer
 Reset_Delay			u3	(	.iCLK(CLOCK_50),
@@ -736,7 +765,7 @@ AUDIO_DAC 	u12	(	//	Audio Side
 //	Audio CODEC and video decoder setting
 I2C_AV_Config 	u1	(	//	Host Side
 						.iCLK(CLOCK_50),
-						.iRST_N(KEY[0]),
+						.iRST_N(reset_n),
 						//	I2C Side
 						.I2C_SCLK(I2C_SCLK),
 						.I2C_SDAT(I2C_SDAT)	);	
