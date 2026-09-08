@@ -27,11 +27,11 @@
 
 // ------------------------------------------
 // Generation parameters:
-//   output_name:         microcontroller_mm_interconnect_0_cmd_demux
+//   output_name:         microcontroller_mm_interconnect_0_rsp_demux_002
 //   ST_DATA_W:           106
 //   ST_CHANNEL_W:        5
-//   NUM_OUTPUTS:         5
-//   VALID_WIDTH:         5
+//   NUM_OUTPUTS:         2
+//   VALID_WIDTH:         1
 // ------------------------------------------
 
 //------------------------------------------
@@ -40,12 +40,12 @@
 // 15610 - Warning: Design contains x input pin(s) that do not drive logic
 //------------------------------------------
 
-module microcontroller_mm_interconnect_0_cmd_demux
+module microcontroller_mm_interconnect_0_rsp_demux_002
 (
     // -------------------
     // Sink
     // -------------------
-    input  [5-1      : 0]   sink_valid,
+    input  [1-1      : 0]   sink_valid,
     input  [106-1    : 0]   sink_data, // ST_DATA_W=106
     input  [5-1 : 0]   sink_channel, // ST_CHANNEL_W=5
     input                         sink_startofpacket,
@@ -69,27 +69,6 @@ module microcontroller_mm_interconnect_0_cmd_demux
     output reg                      src1_endofpacket,
     input                           src1_ready,
 
-    output reg                      src2_valid,
-    output reg [106-1    : 0] src2_data, // ST_DATA_W=106
-    output reg [5-1 : 0] src2_channel, // ST_CHANNEL_W=5
-    output reg                      src2_startofpacket,
-    output reg                      src2_endofpacket,
-    input                           src2_ready,
-
-    output reg                      src3_valid,
-    output reg [106-1    : 0] src3_data, // ST_DATA_W=106
-    output reg [5-1 : 0] src3_channel, // ST_CHANNEL_W=5
-    output reg                      src3_startofpacket,
-    output reg                      src3_endofpacket,
-    input                           src3_ready,
-
-    output reg                      src4_valid,
-    output reg [106-1    : 0] src4_data, // ST_DATA_W=106
-    output reg [5-1 : 0] src4_channel, // ST_CHANNEL_W=5
-    output reg                      src4_startofpacket,
-    output reg                      src4_endofpacket,
-    input                           src4_ready,
-
 
     // -------------------
     // Clock & Reset
@@ -101,7 +80,7 @@ module microcontroller_mm_interconnect_0_cmd_demux
 
 );
 
-    localparam NUM_OUTPUTS = 5;
+    localparam NUM_OUTPUTS = 2;
     wire [NUM_OUTPUTS - 1 : 0] ready_vector;
 
     // -------------------
@@ -113,35 +92,14 @@ module microcontroller_mm_interconnect_0_cmd_demux
         src0_endofpacket   = sink_endofpacket;
         src0_channel       = sink_channel >> NUM_OUTPUTS;
 
-        src0_valid         = sink_channel[0] && sink_valid[0];
+        src0_valid         = sink_channel[0] && sink_valid;
 
         src1_data          = sink_data;
         src1_startofpacket = sink_startofpacket;
         src1_endofpacket   = sink_endofpacket;
         src1_channel       = sink_channel >> NUM_OUTPUTS;
 
-        src1_valid         = sink_channel[1] && sink_valid[1];
-
-        src2_data          = sink_data;
-        src2_startofpacket = sink_startofpacket;
-        src2_endofpacket   = sink_endofpacket;
-        src2_channel       = sink_channel >> NUM_OUTPUTS;
-
-        src2_valid         = sink_channel[2] && sink_valid[2];
-
-        src3_data          = sink_data;
-        src3_startofpacket = sink_startofpacket;
-        src3_endofpacket   = sink_endofpacket;
-        src3_channel       = sink_channel >> NUM_OUTPUTS;
-
-        src3_valid         = sink_channel[3] && sink_valid[3];
-
-        src4_data          = sink_data;
-        src4_startofpacket = sink_startofpacket;
-        src4_endofpacket   = sink_endofpacket;
-        src4_channel       = sink_channel >> NUM_OUTPUTS;
-
-        src4_valid         = sink_channel[4] && sink_valid[4];
+        src1_valid         = sink_channel[1] && sink_valid;
 
     end
 
@@ -150,11 +108,8 @@ module microcontroller_mm_interconnect_0_cmd_demux
     // -------------------
     assign ready_vector[0] = src0_ready;
     assign ready_vector[1] = src1_ready;
-    assign ready_vector[2] = src2_ready;
-    assign ready_vector[3] = src3_ready;
-    assign ready_vector[4] = src4_ready;
 
-    assign sink_ready = |(sink_channel & ready_vector);
+    assign sink_ready = |(sink_channel & {{3{1'b0}},{ready_vector[NUM_OUTPUTS - 1 : 0]}});
 
 endmodule
 
