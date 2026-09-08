@@ -98,7 +98,7 @@ download: build_app
 	docker run --rm --privileged -v /dev/bus/usb:/dev/bus/usb \
 		-v "$(HOST_INSTALL_PATH):/opt/intelFPGA_lite:ro" \
 		-v "$(PROJECT_ROOT):$(CONTAINER_WORK_DIR)" \
-		-w "$(CONTAINER_WORK_DIR)/app" \
+		-w "$(CONTAINER_WORK_DIR)/firmware/app" \
 		$(IMAGE_NAME) \
 		niosv-download -g app.elf -i 0 -d 0 -c 1
 
