@@ -91,9 +91,7 @@ module microcontroller (
 	wire         rst_controller_reset_out_reset;                                 // rst_controller:reset_out -> [DE2_115_TV_0:reset_n, intel_niosv_m_0:reset_reset, irq_mapper:reset, jtag_uart_0:rst_n, mm_interconnect_0:intel_niosv_m_0_reset_reset_bridge_in_reset_reset, onchip_memory2_0:reset, rst_translator:in_reset]
 	wire         rst_controller_reset_out_reset_req;                             // rst_controller:reset_req -> [onchip_memory2_0:reset_req, rst_translator:reset_req_in]
 
-	DE2_115_TV #(
-		.WIN (16)
-	) de2_115_tv_0 (
+	DE2_115_TV de2_115_tv_0 (
 		.CLOCK_50        (clk_clk),                                        //               clk.clk
 		.reset_n         (~rst_controller_reset_out_reset),                //             reset.reset_n
 		.avs_address     (mm_interconnect_0_de2_115_tv_0_avs_address),     //               avs.address

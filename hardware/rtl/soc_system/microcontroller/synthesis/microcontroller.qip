@@ -2,7 +2,7 @@ set_global_assignment -entity "microcontroller" -library "microcontroller" -name
 set_global_assignment -entity "microcontroller" -library "microcontroller" -name IP_TOOL_VERSION "25.1"
 set_global_assignment -entity "microcontroller" -library "microcontroller" -name IP_TOOL_ENV "Qsys"
 set_global_assignment -library "microcontroller" -name SOPCINFO_FILE [file join $::quartus(qip_path) "../../microcontroller.sopcinfo"]
-set_global_assignment -entity "microcontroller" -library "microcontroller" -name SLD_INFO "QSYS_NAME microcontroller HAS_SOPCINFO 1 GENERATION_ID 1788899631"
+set_global_assignment -entity "microcontroller" -library "microcontroller" -name SLD_INFO "QSYS_NAME microcontroller HAS_SOPCINFO 1 GENERATION_ID 1788900521"
 set_global_assignment -library "microcontroller" -name MISC_FILE [file join $::quartus(qip_path) "../microcontroller.cmp"]
 set_global_assignment -library "microcontroller" -name SLD_FILE [file join $::quartus(qip_path) "microcontroller.regmap"]
 set_global_assignment -library "microcontroller" -name SLD_FILE [file join $::quartus(qip_path) "microcontroller.debuginfo"]
@@ -16,7 +16,7 @@ set_global_assignment -entity "microcontroller" -library "microcontroller" -name
 set_global_assignment -entity "microcontroller" -library "microcontroller" -name IP_COMPONENT_REPORT_HIERARCHY "On"
 set_global_assignment -entity "microcontroller" -library "microcontroller" -name IP_COMPONENT_INTERNAL "Off"
 set_global_assignment -entity "microcontroller" -library "microcontroller" -name IP_COMPONENT_VERSION "MS4w"
-set_global_assignment -entity "microcontroller" -library "microcontroller" -name IP_COMPONENT_PARAMETER "QVVUT19HRU5FUkFUSU9OX0lE::MTc4ODg5OTYzMQ==::QXV0byBHRU5FUkFUSU9OX0lE"
+set_global_assignment -entity "microcontroller" -library "microcontroller" -name IP_COMPONENT_PARAMETER "QVVUT19HRU5FUkFUSU9OX0lE::MTc4ODkwMDUyMQ==::QXV0byBHRU5FUkFUSU9OX0lE"
 set_global_assignment -entity "microcontroller" -library "microcontroller" -name IP_COMPONENT_PARAMETER "QVVUT19ERVZJQ0VfRkFNSUxZ::Q3ljbG9uZSBJViBF::QXV0byBERVZJQ0VfRkFNSUxZ"
 set_global_assignment -entity "microcontroller" -library "microcontroller" -name IP_COMPONENT_PARAMETER "QVVUT19ERVZJQ0U=::RVA0Q0UxMTVGMjlDNw==::QXV0byBERVZJQ0U="
 set_global_assignment -entity "microcontroller" -library "microcontroller" -name IP_COMPONENT_PARAMETER "QVVUT19ERVZJQ0VfU1BFRURHUkFERQ==::Nw==::QXV0byBERVZJQ0VfU1BFRURHUkFERQ=="
@@ -833,7 +833,6 @@ set_global_assignment -entity "DE2_115_TV" -library "microcontroller" -name IP_C
 set_global_assignment -entity "DE2_115_TV" -library "microcontroller" -name IP_COMPONENT_AUTHOR "VXNlcg=="
 set_global_assignment -entity "DE2_115_TV" -library "microcontroller" -name IP_COMPONENT_VERSION "MS4w"
 set_global_assignment -entity "DE2_115_TV" -library "microcontroller" -name IP_COMPONENT_DESCRIPTION "REUyLTExNSBUViBCb3ggdG9wIGxldmVsIChjdXN0b20gdmlkZW8gY2FwdHVyZSArIHByb2Nlc3NfdG9wKSB3cmFwcGVkIGZvciBQbGF0Zm9ybSBEZXNpZ25lcg=="
-set_global_assignment -entity "DE2_115_TV" -library "microcontroller" -name IP_COMPONENT_PARAMETER "V0lO::MTY=::VGVtcGxhdGUgbWF0Y2ggd2luZG93IHNpemU="
 
 set_global_assignment -library "microcontroller" -name VERILOG_FILE [file join $::quartus(qip_path) "microcontroller.v"]
 set_global_assignment -library "microcontroller" -name VERILOG_FILE [file join $::quartus(qip_path) "submodules/altera_reset_controller.v"]
@@ -956,6 +955,7 @@ set_global_assignment -library "microcontroller" -name SYSTEMVERILOG_FILE [file 
 set_global_assignment -library "microcontroller" -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) "submodules/window_buffer.sv"]
 set_global_assignment -library "microcontroller" -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) "submodules/template_match.sv"]
 set_global_assignment -library "microcontroller" -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) "submodules/process_top.sv"]
+set_global_assignment -library "microcontroller" -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) "submodules/line_buffer.sv"]
 
 set_global_assignment -entity "altera_reset_controller" -library "microcontroller" -name IP_TOOL_NAME "altera_reset_controller"
 set_global_assignment -entity "altera_reset_controller" -library "microcontroller" -name IP_TOOL_VERSION "25.1"

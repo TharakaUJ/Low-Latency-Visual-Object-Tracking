@@ -65,6 +65,7 @@ add_fileset_file cdc_pulse_sync.sv     SYSTEM_VERILOG PATH ../processing/cdc_pul
 add_fileset_file window_buffer.sv      SYSTEM_VERILOG PATH ../processing/window_buffer.sv
 add_fileset_file template_match.sv     SYSTEM_VERILOG PATH ../processing/template_match.sv
 add_fileset_file process_top.sv        SYSTEM_VERILOG PATH ../processing/process_top.sv
+add_fileset_file line_buffer.sv        SYSTEM_VERILOG PATH ../processing/line_buffer.sv
 
 add_fileset SIM_VERILOG SIM_VERILOG "" ""
 set_fileset_property SIM_VERILOG TOP_LEVEL DE2_115_TV
@@ -75,12 +76,12 @@ set_fileset_property SIM_VERILOG ENABLE_FILE_OVERWRITE_MODE true
 # parameters (forwarded to process_top's WIN / IMG_W / IMG_H if you want
 # them tunable from Platform Designer - optional, delete if not needed)
 #
-add_parameter WIN INTEGER 16
-set_parameter_property WIN DEFAULT_VALUE 16
-set_parameter_property WIN DISPLAY_NAME "Template match window size"
-set_parameter_property WIN TYPE INTEGER
-set_parameter_property WIN UNITS None
-set_parameter_property WIN HDL_PARAMETER true
+# add_parameter WIN INTEGER 16
+# set_parameter_property WIN DEFAULT_VALUE 16
+# set_parameter_property WIN DISPLAY_NAME "Template match window size"
+# set_parameter_property WIN TYPE INTEGER
+# set_parameter_property WIN UNITS None
+# set_parameter_property WIN HDL_PARAMETER true
 
 #
 # connection point clk (CLOCK_50 - Avalon / processing 50MHz domain)

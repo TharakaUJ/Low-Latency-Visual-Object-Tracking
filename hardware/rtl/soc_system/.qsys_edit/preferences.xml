@@ -7,7 +7,7 @@
    <irq preferredWidth="34" />
   </columns>
  </systemtable>
- <library expandedCategories="Library,Library/DE2-115 Board,Project" />
+ <library expandedCategories="Library,Project" />
  <window width="1472" height="853" x="2162" y="68" />
  <generation block_symbol_file="0" />
 </preferences>

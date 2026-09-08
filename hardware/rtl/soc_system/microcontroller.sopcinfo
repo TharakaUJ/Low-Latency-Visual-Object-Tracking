@@ -5,11 +5,11 @@
  version="1.0"
  fabric="QSYS">
  <!-- Format version 25.1 1129 (Future versions may contain additional information.) -->
- <!-- 2026.09.09.02:03:51 -->
+ <!-- 2026.09.09.02:18:41 -->
  <!-- A collection of modules and connections -->
  <parameter name="AUTO_GENERATION_ID">
   <type>java.lang.Integer</type>
-  <value>1788899631</value>
+  <value>1788900521</value>
   <derived>false</derived>
   <enabled>true</enabled>
   <visible>false</visible>
@@ -106,14 +106,6 @@
    path="DE2_115_TV_0">
   <!-- Describes a single module. Module parameters are
 the requested settings for a module instance. -->
-  <parameter name="WIN">
-   <type>int</type>
-   <value>16</value>
-   <derived>false</derived>
-   <enabled>true</enabled>
-   <visible>true</visible>
-   <valid>true</valid>
-  </parameter>
   <parameter name="deviceFamily">
    <type>java.lang.String</type>
    <value>UNKNOWN</value>
