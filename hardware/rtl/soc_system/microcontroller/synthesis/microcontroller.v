@@ -4,8 +4,35 @@
 
 `timescale 1 ps / 1 ps
 module microcontroller (
-		input  wire  clk_clk,       //   clk.clk
-		input  wire  reset_reset_n  // reset.reset_n
+		input  wire        clk_clk,                         //                  clk.clk
+		output wire        de2_115_tv_i2c_i2c_sclk,         //       de2_115_tv_i2c.i2c_sclk
+		inout  wire        de2_115_tv_i2c_i2c_sdat,         //                     .i2c_sdat
+		output wire [8:0]  de2_115_tv_leds_ledg,            //      de2_115_tv_leds.ledg
+		output wire [17:0] de2_115_tv_leds_ledr,            //                     .ledr
+		output wire [12:0] de2_115_tv_sdram_dram_addr,      //     de2_115_tv_sdram.dram_addr
+		output wire [1:0]  de2_115_tv_sdram_dram_ba,        //                     .dram_ba
+		output wire        de2_115_tv_sdram_dram_cas_n,     //                     .dram_cas_n
+		output wire        de2_115_tv_sdram_dram_cke,       //                     .dram_cke
+		output wire        de2_115_tv_sdram_dram_clk,       //                     .dram_clk
+		output wire        de2_115_tv_sdram_dram_cs_n,      //                     .dram_cs_n
+		inout  wire [31:0] de2_115_tv_sdram_dram_dq,        //                     .dram_dq
+		output wire [3:0]  de2_115_tv_sdram_dram_dqm,       //                     .dram_dqm
+		output wire        de2_115_tv_sdram_dram_ras_n,     //                     .dram_ras_n
+		output wire        de2_115_tv_sdram_dram_we_n,      //                     .dram_we_n
+		input  wire        de2_115_tv_tvdecoder_td_clk27,   // de2_115_tv_tvdecoder.td_clk27
+		input  wire [7:0]  de2_115_tv_tvdecoder_td_data,    //                     .td_data
+		input  wire        de2_115_tv_tvdecoder_td_hs,      //                     .td_hs
+		output wire        de2_115_tv_tvdecoder_td_reset_n, //                     .td_reset_n
+		input  wire        de2_115_tv_tvdecoder_td_vs,      //                     .td_vs
+		output wire [7:0]  de2_115_tv_vga_vga_b,            //       de2_115_tv_vga.vga_b
+		output wire        de2_115_tv_vga_vga_blank_n,      //                     .vga_blank_n
+		output wire        de2_115_tv_vga_vga_clk,          //                     .vga_clk
+		output wire [7:0]  de2_115_tv_vga_vga_g,            //                     .vga_g
+		output wire        de2_115_tv_vga_vga_hs,           //                     .vga_hs
+		output wire [7:0]  de2_115_tv_vga_vga_r,            //                     .vga_r
+		output wire        de2_115_tv_vga_vga_sync_n,       //                     .vga_sync_n
+		output wire        de2_115_tv_vga_vga_vs,           //                     .vga_vs
+		input  wire        reset_reset_n                    //                reset.reset_n
 	);
 
 	wire  [31:0] intel_niosv_m_0_data_manager_readdata;                          // mm_interconnect_0:intel_niosv_m_0_data_manager_readdata -> intel_niosv_m_0:data_manager_readdata
@@ -31,6 +58,12 @@ module microcontroller (
 	wire         mm_interconnect_0_jtag_uart_0_avalon_jtag_slave_read;           // mm_interconnect_0:jtag_uart_0_avalon_jtag_slave_read -> jtag_uart_0:av_read_n
 	wire         mm_interconnect_0_jtag_uart_0_avalon_jtag_slave_write;          // mm_interconnect_0:jtag_uart_0_avalon_jtag_slave_write -> jtag_uart_0:av_write_n
 	wire  [31:0] mm_interconnect_0_jtag_uart_0_avalon_jtag_slave_writedata;      // mm_interconnect_0:jtag_uart_0_avalon_jtag_slave_writedata -> jtag_uart_0:av_writedata
+	wire  [31:0] mm_interconnect_0_de2_115_tv_0_avs_readdata;                    // DE2_115_TV_0:avs_readdata -> mm_interconnect_0:DE2_115_TV_0_avs_readdata
+	wire         mm_interconnect_0_de2_115_tv_0_avs_waitrequest;                 // DE2_115_TV_0:avs_waitrequest -> mm_interconnect_0:DE2_115_TV_0_avs_waitrequest
+	wire   [8:0] mm_interconnect_0_de2_115_tv_0_avs_address;                     // mm_interconnect_0:DE2_115_TV_0_avs_address -> DE2_115_TV_0:avs_address
+	wire         mm_interconnect_0_de2_115_tv_0_avs_read;                        // mm_interconnect_0:DE2_115_TV_0_avs_read -> DE2_115_TV_0:avs_read
+	wire         mm_interconnect_0_de2_115_tv_0_avs_write;                       // mm_interconnect_0:DE2_115_TV_0_avs_write -> DE2_115_TV_0:avs_write
+	wire  [31:0] mm_interconnect_0_de2_115_tv_0_avs_writedata;                   // mm_interconnect_0:DE2_115_TV_0_avs_writedata -> DE2_115_TV_0:avs_writedata
 	wire  [31:0] mm_interconnect_0_intel_niosv_m_0_dm_agent_readdata;            // intel_niosv_m_0:dm_agent_readdata -> mm_interconnect_0:intel_niosv_m_0_dm_agent_readdata
 	wire         mm_interconnect_0_intel_niosv_m_0_dm_agent_waitrequest;         // intel_niosv_m_0:dm_agent_waitrequest -> mm_interconnect_0:intel_niosv_m_0_dm_agent_waitrequest
 	wire  [15:0] mm_interconnect_0_intel_niosv_m_0_dm_agent_address;             // mm_interconnect_0:intel_niosv_m_0_dm_agent_address -> intel_niosv_m_0:dm_agent_address
@@ -55,8 +88,46 @@ module microcontroller (
 	wire  [31:0] mm_interconnect_0_intel_niosv_m_0_timer_sw_agent_writedata;     // mm_interconnect_0:intel_niosv_m_0_timer_sw_agent_writedata -> intel_niosv_m_0:timer_sw_agent_writedata
 	wire         irq_mapper_receiver0_irq;                                       // jtag_uart_0:av_irq -> irq_mapper:receiver0_irq
 	wire  [15:0] intel_niosv_m_0_platform_irq_rx_irq;                            // irq_mapper:sender_irq -> intel_niosv_m_0:platform_irq_rx_irq
-	wire         rst_controller_reset_out_reset;                                 // rst_controller:reset_out -> [intel_niosv_m_0:reset_reset, irq_mapper:reset, jtag_uart_0:rst_n, mm_interconnect_0:intel_niosv_m_0_reset_reset_bridge_in_reset_reset, onchip_memory2_0:reset, rst_translator:in_reset]
+	wire         rst_controller_reset_out_reset;                                 // rst_controller:reset_out -> [DE2_115_TV_0:reset_n, intel_niosv_m_0:reset_reset, irq_mapper:reset, jtag_uart_0:rst_n, mm_interconnect_0:intel_niosv_m_0_reset_reset_bridge_in_reset_reset, onchip_memory2_0:reset, rst_translator:in_reset]
 	wire         rst_controller_reset_out_reset_req;                             // rst_controller:reset_req -> [onchip_memory2_0:reset_req, rst_translator:reset_req_in]
+
+	DE2_115_TV de2_115_tv_0 (
+		.CLOCK_50        (clk_clk),                                        //               clk.clk
+		.reset_n         (~rst_controller_reset_out_reset),                //             reset.reset_n
+		.avs_address     (mm_interconnect_0_de2_115_tv_0_avs_address),     //               avs.address
+		.avs_read        (mm_interconnect_0_de2_115_tv_0_avs_read),        //                  .read
+		.avs_readdata    (mm_interconnect_0_de2_115_tv_0_avs_readdata),    //                  .readdata
+		.avs_write       (mm_interconnect_0_de2_115_tv_0_avs_write),       //                  .write
+		.avs_writedata   (mm_interconnect_0_de2_115_tv_0_avs_writedata),   //                  .writedata
+		.avs_waitrequest (mm_interconnect_0_de2_115_tv_0_avs_waitrequest), //                  .waitrequest
+		.LEDG            (de2_115_tv_leds_ledg),                           //      conduit_leds.ledg
+		.LEDR            (de2_115_tv_leds_ledr),                           //                  .ledr
+		.VGA_B           (de2_115_tv_vga_vga_b),                           //       conduit_vga.vga_b
+		.VGA_BLANK_N     (de2_115_tv_vga_vga_blank_n),                     //                  .vga_blank_n
+		.VGA_CLK         (de2_115_tv_vga_vga_clk),                         //                  .vga_clk
+		.VGA_G           (de2_115_tv_vga_vga_g),                           //                  .vga_g
+		.VGA_HS          (de2_115_tv_vga_vga_hs),                          //                  .vga_hs
+		.VGA_R           (de2_115_tv_vga_vga_r),                           //                  .vga_r
+		.VGA_SYNC_N      (de2_115_tv_vga_vga_sync_n),                      //                  .vga_sync_n
+		.VGA_VS          (de2_115_tv_vga_vga_vs),                          //                  .vga_vs
+		.I2C_SCLK        (de2_115_tv_i2c_i2c_sclk),                        //       conduit_i2c.i2c_sclk
+		.I2C_SDAT        (de2_115_tv_i2c_i2c_sdat),                        //                  .i2c_sdat
+		.TD_CLK27        (de2_115_tv_tvdecoder_td_clk27),                  // conduit_tvdecoder.td_clk27
+		.TD_DATA         (de2_115_tv_tvdecoder_td_data),                   //                  .td_data
+		.TD_HS           (de2_115_tv_tvdecoder_td_hs),                     //                  .td_hs
+		.TD_RESET_N      (de2_115_tv_tvdecoder_td_reset_n),                //                  .td_reset_n
+		.TD_VS           (de2_115_tv_tvdecoder_td_vs),                     //                  .td_vs
+		.DRAM_ADDR       (de2_115_tv_sdram_dram_addr),                     //     conduit_sdram.dram_addr
+		.DRAM_BA         (de2_115_tv_sdram_dram_ba),                       //                  .dram_ba
+		.DRAM_CAS_N      (de2_115_tv_sdram_dram_cas_n),                    //                  .dram_cas_n
+		.DRAM_CKE        (de2_115_tv_sdram_dram_cke),                      //                  .dram_cke
+		.DRAM_CLK        (de2_115_tv_sdram_dram_clk),                      //                  .dram_clk
+		.DRAM_CS_N       (de2_115_tv_sdram_dram_cs_n),                     //                  .dram_cs_n
+		.DRAM_DQ         (de2_115_tv_sdram_dram_dq),                       //                  .dram_dq
+		.DRAM_DQM        (de2_115_tv_sdram_dram_dqm),                      //                  .dram_dqm
+		.DRAM_RAS_N      (de2_115_tv_sdram_dram_ras_n),                    //                  .dram_ras_n
+		.DRAM_WE_N       (de2_115_tv_sdram_dram_we_n)                      //                  .dram_we_n
+	);
 
 	microcontroller_intel_niosv_m_0 intel_niosv_m_0 (
 		.clk                               (clk_clk),                                                        //                 clk.clk
@@ -157,6 +228,12 @@ module microcontroller (
 		.intel_niosv_m_0_instruction_manager_readdata      (intel_niosv_m_0_instruction_manager_readdata),                   //                                            .readdata
 		.intel_niosv_m_0_instruction_manager_readdatavalid (intel_niosv_m_0_instruction_manager_readdatavalid),              //                                            .readdatavalid
 		.intel_niosv_m_0_instruction_manager_response      (intel_niosv_m_0_instruction_manager_response),                   //                                            .response
+		.DE2_115_TV_0_avs_address                          (mm_interconnect_0_de2_115_tv_0_avs_address),                     //                            DE2_115_TV_0_avs.address
+		.DE2_115_TV_0_avs_write                            (mm_interconnect_0_de2_115_tv_0_avs_write),                       //                                            .write
+		.DE2_115_TV_0_avs_read                             (mm_interconnect_0_de2_115_tv_0_avs_read),                        //                                            .read
+		.DE2_115_TV_0_avs_readdata                         (mm_interconnect_0_de2_115_tv_0_avs_readdata),                    //                                            .readdata
+		.DE2_115_TV_0_avs_writedata                        (mm_interconnect_0_de2_115_tv_0_avs_writedata),                   //                                            .writedata
+		.DE2_115_TV_0_avs_waitrequest                      (mm_interconnect_0_de2_115_tv_0_avs_waitrequest),                 //                                            .waitrequest
 		.intel_niosv_m_0_dm_agent_address                  (mm_interconnect_0_intel_niosv_m_0_dm_agent_address),             //                    intel_niosv_m_0_dm_agent.address
 		.intel_niosv_m_0_dm_agent_write                    (mm_interconnect_0_intel_niosv_m_0_dm_agent_write),               //                                            .write
 		.intel_niosv_m_0_dm_agent_read                     (mm_interconnect_0_intel_niosv_m_0_dm_agent_read),                //                                            .read
