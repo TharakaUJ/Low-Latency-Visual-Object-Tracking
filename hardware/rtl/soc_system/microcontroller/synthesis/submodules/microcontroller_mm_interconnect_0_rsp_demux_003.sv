@@ -27,11 +27,11 @@
 
 // ------------------------------------------
 // Generation parameters:
-//   output_name:         microcontroller_mm_interconnect_0_cmd_demux_001
+//   output_name:         microcontroller_mm_interconnect_0_rsp_demux_003
 //   ST_DATA_W:           106
 //   ST_CHANNEL_W:        6
 //   NUM_OUTPUTS:         2
-//   VALID_WIDTH:         6
+//   VALID_WIDTH:         1
 // ------------------------------------------
 
 //------------------------------------------
@@ -40,12 +40,12 @@
 // 15610 - Warning: Design contains x input pin(s) that do not drive logic
 //------------------------------------------
 
-module microcontroller_mm_interconnect_0_cmd_demux_001
+module microcontroller_mm_interconnect_0_rsp_demux_003
 (
     // -------------------
     // Sink
     // -------------------
-    input  [6-1      : 0]   sink_valid,
+    input  [1-1      : 0]   sink_valid,
     input  [106-1    : 0]   sink_data, // ST_DATA_W=106
     input  [6-1 : 0]   sink_channel, // ST_CHANNEL_W=6
     input                         sink_startofpacket,
@@ -92,14 +92,14 @@ module microcontroller_mm_interconnect_0_cmd_demux_001
         src0_endofpacket   = sink_endofpacket;
         src0_channel       = sink_channel >> NUM_OUTPUTS;
 
-        src0_valid         = sink_channel[0] && sink_valid[0];
+        src0_valid         = sink_channel[0] && sink_valid;
 
         src1_data          = sink_data;
         src1_startofpacket = sink_startofpacket;
         src1_endofpacket   = sink_endofpacket;
         src1_channel       = sink_channel >> NUM_OUTPUTS;
 
-        src1_valid         = sink_channel[1] && sink_valid[1];
+        src1_valid         = sink_channel[1] && sink_valid;
 
     end
 
