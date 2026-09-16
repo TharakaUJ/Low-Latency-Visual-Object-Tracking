@@ -355,8 +355,6 @@ begin
 		Pre_AVRD	<=	0;
 		mAVWR		<=	0;
 		mAVRD		<=	0;
-		AV_ACTIVE_WR	<=	0;
-		AV_ACTIVE_RD	<=	0;
 		AV_DONE		<=	0;
 	end
 	else
@@ -373,17 +371,18 @@ begin
 			mAVRD	<=	1;
 
 		//	Clear NiosV completion pulse by default; set for one cycle on completion
+		//	(AV_ACTIVE_WR/AV_ACTIVE_RD themselves are driven only in the
+		//	 "Auto Read/Write Control" always block below, to avoid a
+		//	 multiple-driver conflict - this block only reads them)
 		AV_DONE	<=	0;
 		if(AV_ACTIVE_WR && mWR_DONE)
 		begin
 			mAVWR		<=	0;
-			AV_ACTIVE_WR	<=	0;
 			AV_DONE		<=	1;
 		end
 		if(AV_ACTIVE_RD && mRD_DONE)
 		begin
 			mAVRD		<=	0;
-			AV_ACTIVE_RD	<=	0;
 			AV_RDATA	<=	mDATAOUT;
 			AV_DONE		<=	1;
 		end
@@ -516,6 +515,8 @@ begin
 		mLENGTH	<=	0;
 		WR_MASK <=	0;
 		RD_MASK <=	0;
+		AV_ACTIVE_WR	<=	0;
+		AV_ACTIVE_RD	<=	0;
 	end
 	else
 	begin
@@ -599,6 +600,13 @@ begin
 			RD_MASK	<=	0;
 			mRD		<=	0;
 		end
+		//	Clear the NiosV "active" flags once their transaction completes
+		//	(set above, when dispatched); kept in this same block as the
+		//	rest of AV_ACTIVE_WR/RD's writes to avoid a multiple-driver error.
+		if(AV_ACTIVE_WR && mWR_DONE)
+			AV_ACTIVE_WR	<=	0;
+		if(AV_ACTIVE_RD && mRD_DONE)
+			AV_ACTIVE_RD	<=	0;
 	end
 end
 
