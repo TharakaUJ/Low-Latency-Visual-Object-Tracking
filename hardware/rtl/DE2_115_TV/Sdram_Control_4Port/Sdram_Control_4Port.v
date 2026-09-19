@@ -54,7 +54,16 @@ module Sdram_Control_4Port(
         DQ,
         DQM,
 		SDR_CLK,
-		CLK_18
+		CLK_18,
+		CLK,
+
+		//	NiosV / Avalon on-demand port (single-word random access)
+		AV_RD,
+		AV_WR,
+		AV_ADDR,
+		AV_WDATA,
+		AV_RDATA,
+		AV_DONE
         );
 
 
@@ -113,6 +122,15 @@ output                          WE_N;                   //SDRAM write enable
 inout   [`DSIZE-1:0]            DQ;                     //SDRAM data bus
 output  [`DSIZE/8-1:0]          DQM;                    //SDRAM data mask lines
 output							SDR_CLK;				//SDRAM clock
+
+//	NiosV / Avalon on-demand port (runs on internal CLK domain - see Avalon_Sdram_Port bridge for CDC)
+input							AV_RD;					//Read request pulse
+input							AV_WR;					//Write request pulse
+input	[`ASIZE-1:0]			AV_ADDR;				//Word address
+input	[`DSIZE-1:0]			AV_WDATA;				//Write data
+output reg [`DSIZE-1:0]			AV_RDATA;				//Read data
+output reg						AV_DONE;				//1-cycle pulse when op completes
+
 //	Internal Registers/Wires
 //	Controller
 reg		[`ASIZE-1:0]			mADDR;					//Internal address
@@ -127,6 +145,10 @@ reg								mWR_DONE;				//Flag write done, 1 pulse SDR_CLK
 reg								mRD_DONE;				//Flag read done, 1 pulse SDR_CLK
 reg								mWR,Pre_WR;				//Internal WR edge capture
 reg								mRD,Pre_RD;				//Internal RD edge capture
+reg								mAVWR,Pre_AVWR;			//NiosV write request edge capture
+reg								mAVRD,Pre_AVRD;			//NiosV read request edge capture
+reg								AV_ACTIVE_WR;				//Currently-running op is the NiosV write
+reg								AV_ACTIVE_RD;				//Currently-running op is the NiosV read
 reg 	[9:0] 					ST;						//Controller status
 reg		[1:0] 					CMD;					//Controller command
 reg								PM_STOP;				//Flag page mode stop
@@ -267,7 +289,8 @@ Sdram_WR_FIFO 	write_fifo2(
 				.rdusedw(write_side_fifo_rusedw2)
 				);
 				
-assign	mDATAIN	=	(WR_MASK[0])	?	mDATAIN1	:
+assign	mDATAIN	=	(AV_ACTIVE_WR)	?	AV_WDATA	:
+						(WR_MASK[0])	?	mDATAIN1	:
 										mDATAIN2	;
 
 Sdram_RD_FIFO 	read_fifo1(
@@ -328,11 +351,47 @@ begin
 		IN_REQ		<=	0;
 		mWR_DONE	<=	0;
 		mRD_DONE	<=	0;
+		Pre_AVWR	<=	0;
+		Pre_AVRD	<=	0;
+		mAVWR		<=	0;
+		mAVRD		<=	0;
+		AV_DONE		<=	0;
 	end
 	else
 	begin
 		Pre_RD	<=	mRD;
 		Pre_WR	<=	mWR;
+
+		//	Capture NiosV request pulses (level-set until serviced)
+		Pre_AVWR	<=	AV_WR;
+		Pre_AVRD	<=	AV_RD;
+		if({Pre_AVWR,AV_WR}==2'b01)
+			mAVWR	<=	1;
+		if({Pre_AVRD,AV_RD}==2'b01)
+			mAVRD	<=	1;
+
+		//	Clear NiosV completion pulse by default; set for one cycle on completion
+		//	(AV_ACTIVE_WR/AV_ACTIVE_RD themselves are driven only in the
+		//	 "Auto Read/Write Control" always block below, to avoid a
+		//	 multiple-driver conflict - this block only reads them)
+		AV_DONE	<=	0;
+		//	Capture AV_RDATA at the SAME cycle timing the RD1/RD2 FIFOs use
+		//	(OUT_VALID), which is CAS-latency-correct. Sampling on mRD_DONE
+		//	instead (one cycle later) grabs mDATAOUT after it has already
+		//	moved past the valid DQ window, returning stale/garbage data.
+		if(AV_ACTIVE_RD && OUT_VALID)
+			AV_RDATA	<=	mDATAOUT;
+
+		if(AV_ACTIVE_WR && mWR_DONE)
+		begin
+			mAVWR		<=	0;
+			AV_DONE		<=	1;
+		end
+		if(AV_ACTIVE_RD && mRD_DONE)
+		begin
+			mAVRD		<=	0;
+			AV_DONE		<=	1;
+		end
 		case(ST)
 		0:	begin
 				if({Pre_RD,mRD}==2'b01)
@@ -462,6 +521,8 @@ begin
 		mLENGTH	<=	0;
 		WR_MASK <=	0;
 		RD_MASK <=	0;
+		AV_ACTIVE_WR	<=	0;
+		AV_ACTIVE_RD	<=	0;
 	end
 	else
 	begin
@@ -470,8 +531,32 @@ begin
 			(WR1_LOAD==0)	&&	(RD1_LOAD==0) &&
 			(WR2_LOAD==0)	&&	(RD2_LOAD==0) )
 		begin
+			//	NiosV on-demand read (highest priority - low duty cycle, single word)
+			if(mAVRD)
+			begin
+				mADDR		<=	AV_ADDR;
+				mLENGTH		<=	1;
+				WR_MASK		<=	2'b00;
+				RD_MASK		<=	2'b00;
+				AV_ACTIVE_RD	<=	1;
+				AV_ACTIVE_WR	<=	0;
+				mWR		<=	0;
+				mRD		<=	1;
+			end
+			//	NiosV on-demand write
+			else if(mAVWR)
+			begin
+				mADDR		<=	AV_ADDR;
+				mLENGTH		<=	1;
+				WR_MASK		<=	2'b00;
+				RD_MASK		<=	2'b00;
+				AV_ACTIVE_RD	<=	0;
+				AV_ACTIVE_WR	<=	1;
+				mWR		<=	1;
+				mRD		<=	0;
+			end
 			//	Read Side 1
-			if( (read_side_fifo_wusedw1 < RD1_LENGTH) )
+			else if( (read_side_fifo_wusedw1 < RD1_LENGTH) )
 			begin
 				mADDR	<=	rRD1_ADDR;
 				mLENGTH	<=	RD1_LENGTH;
@@ -521,6 +606,13 @@ begin
 			RD_MASK	<=	0;
 			mRD		<=	0;
 		end
+		//	Clear the NiosV "active" flags once their transaction completes
+		//	(set above, when dispatched); kept in this same block as the
+		//	rest of AV_ACTIVE_WR/RD's writes to avoid a multiple-driver error.
+		if(AV_ACTIVE_WR && mWR_DONE)
+			AV_ACTIVE_WR	<=	0;
+		if(AV_ACTIVE_RD && mRD_DONE)
+			AV_ACTIVE_RD	<=	0;
 	end
 end
 

@@ -48,7 +48,17 @@ module DE2_115_TV
 		avs_readdata,
 		avs_write,
 		avs_writedata,
-		avs_waitrequest	
+		avs_waitrequest,
+
+		// avalon interface #2 - NiosV direct access to SDRAM framebuffer
+		avs2_clk,
+		avs2_reset_n,
+		avs2_address,
+		avs2_read,
+		avs2_readdata,
+		avs2_write,
+		avs2_writedata,
+		avs2_waitrequest
 	   
 	);
 //===========================================================================
@@ -163,6 +173,25 @@ input					avs_write;
 input			[31:0]	avs_writedata;
 output					avs_waitrequest;
 
+//	Avalon-MM slave #2 (from Platform Designer / NiosV) - direct SDRAM framebuffer access
+input					avs2_clk;
+input					avs2_reset_n;
+input			[21:0]	avs2_address;		//	word address, must fit `ASIZE in Sdram_Params.h
+input					avs2_read;
+output			[31:0]	avs2_readdata;
+input					avs2_write;
+input			[31:0]	avs2_writedata;
+output					avs2_waitrequest;
+
+//	wires connecting Avalon_Sdram_Port bridge <-> Sdram_Control_4Port on-demand port
+wire					sdram_core_clk;		//	Sdram_Control_4Port's internal CLK (from Sdram_PLL)
+wire					av_rd;
+wire					av_wr;
+wire			[21:0]	av_addr;
+wire			[31:0]	av_wdata;
+wire			[31:0]	av_rdata;
+wire					av_done;
+
 //=============================================================================
 // Structural coding
 //=============================================================================
@@ -170,8 +199,11 @@ output					avs_waitrequest;
 //	Turn On TV Decoder
 assign	TD_RESET_N	=	1'b1;
 
-assign	LEDG	=	VGA_Y;
-assign	LEDR	=	VGA_X;
+// assign LEDG = av_rdata[8:0];
+assign LEDG[0] = NTSC;
+assign LEDG[1] = PAL;
+assign LEDG[2] = TD_Stable;
+assign LEDR = av_rdata[27:9];
 
 assign	m1VGA_Read	=	VGA_Y[0]		?	1'b0		:	VGA_Read	;
 assign	m2VGA_Read	=	VGA_Y[0]		?	VGA_Read	:	1'b0		;
@@ -283,8 +315,36 @@ Sdram_Control_4Port	u6	(	//	HOST Side
 				            .CAS_N(DRAM_CAS_N),
 				            .WE_N(DRAM_WE_N),
 						    .DQ(DRAM_DQ),
-				            .DQM({DRAM_DQM[1],DRAM_DQM[0]}),
-							.SDR_CLK(DRAM_CLK)	);
+				            .DQM(DRAM_DQM),
+							.SDR_CLK(DRAM_CLK),
+							.CLK(sdram_core_clk),
+							//	NiosV on-demand port
+							.AV_RD(av_rd),
+							.AV_WR(av_wr),
+							.AV_ADDR(av_addr),
+							.AV_WDATA(av_wdata),
+							.AV_RDATA(av_rdata),
+							.AV_DONE(av_done)	);
+
+//	Avalon-MM <-> NiosV bridge for direct SDRAM framebuffer access
+Avalon_Sdram_Port #(.ASIZE(22), .DSIZE(32)) niosv_sdram_bridge (
+	.avs_clk		(avs2_clk),
+	.avs_reset_n	(avs2_reset_n),
+	.avs_address	(avs2_address),
+	.avs_read		(avs2_read),
+	.avs_write		(avs2_write),
+	.avs_writedata	(avs2_writedata),
+	.avs_readdata	(avs2_readdata),
+	.avs_waitrequest(avs2_waitrequest),
+
+	.sdram_clk		(sdram_core_clk),
+	.sdram_reset_n	(DLY0),
+	.AV_RD			(av_rd),
+	.AV_WR			(av_wr),
+	.AV_ADDR		(av_addr),
+	.AV_WDATA		(av_wdata),
+	.AV_RDATA		(av_rdata),
+	.AV_DONE		(av_done)	);
 
 //	YUV 4:2:2 to YUV 4:4:4
 YUV422_to_444		u7	(	//	YUV 4:2:2 Input

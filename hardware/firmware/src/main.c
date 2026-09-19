@@ -1,71 +1,171 @@
-#include <stdio.h>
+#include <sys/alt_stdio.h>   // alt_printf
 #include <stdint.h>
+#include <io.h>              // IORD_32DIRECT / IOWR_32DIRECT (cache-bypassing)
+#include <fcntl.h>           // open()
+#include <unistd.h>          // read()/write()/close()
+#include <system.h>
 
 // ============================================================================
-// Avalon-MM Slave Base Address Configuration
-// Replace this with the actual physical base address assigned in Platform Designer (Qsys)
+// avs2 Avalon-MM Slave Base Address (NiosV -> Sdram_Control_4Port AV_* port)
 // ============================================================================
-#define AVALON_SLAVE_BASE      0x00022000  // Example base address
-
-// ============================================================================
-// Register Offset Macros (Word Indices converted to Byte Addresses)
-// ============================================================================
-#define REG_BYTES              4           // 32-bit data width = 4 bytes per word
-
-#define ADDR_BOUND_X          (AVALON_SLAVE_BASE + (0 * REG_BYTES)) // 0x00
-#define ADDR_BOUND_Y          (AVALON_SLAVE_BASE + (1 * REG_BYTES)) // 0x04
-#define ADDR_TMPL_BASE        (AVALON_SLAVE_BASE + (2 * REG_BYTES)) // 0x08
-
-// Dynamic macro to fetch any template register by its specific array index (0 to 255)
-#define ADDR_TMPL_REG(idx)    (ADDR_TMPL_BASE + ((idx) * REG_BYTES))
-
-// Dynamic macro to fetch template register using 2D (row, col) coordinates (16x16 grid)
-#define WIN_SIZE              16
-#define ADDR_TMPL_XY(row, col) (ADDR_TMPL_BASE + ((((row) * WIN_SIZE) + (col)) * REG_BYTES))
+#define AVS2_BASE               0x01000000u
 
 // ============================================================================
-// Hardware Abstraction Layer (HAL) Read Macro
+// Frame geometry / pixel format
+//
+// NOTE: this matches the ACTUAL raw capture buffer wired in DE2_115_TV.v
+// (WR1_ADDR=0, WR1_MAX_ADDR=640*576 for NTSC=0/PAL), NOT a 720x480 frame.
+// The camera writer (WR1_DATA) is only 16 bits wide - each 32-bit SDRAM
+// word holds exactly ONE raw YCbCr422 sample (upper 16 bits are always 0),
+// not two packed pixels. This is the simplest possible readout: the raw,
+// still-interlaced, still-including-blanking capture buffer, dumped as-is.
+// Deinterlacing / blanking removal / YCbCr->RGB is left to the host script.
 // ============================================================================
-// Uses volatile to prevent the compiler from caching memory reads
-#define READ_REG(addr)        (*((volatile uint32_t *)(addr)))
+#define FRAME_WIDTH               640u          // raw samples per line (incl. blanking)
+#define FRAME_HEIGHT              576u          // raw lines, both interlaced fields (PAL)
+#define FRAME_WORDS               (FRAME_WIDTH * FRAME_HEIGHT)  // 1 word = 1 sample
+#define FRAME_BYTES               (FRAME_WORDS * 2u)            // 2 bytes/sample (16-bit)
 
 // ============================================================================
-// Test Main Application
+// Register access helpers (cache-bypassing, sweeps memory using word indexes)
 // ============================================================================
-int main(void) {
-    // Standard printf handles multi-line transitions and string formatting reliably
-    printf("Starting Avalon Slave Memory Read Test...\n\n");
+#define READ_REG(addr)          IORD_32DIRECT((addr), 0)
+#define AVS2_WORD_ADDR(idx)     (AVS2_BASE + ((idx) * 4u))
 
-    // 1. Read Boundary Registers
-    uint32_t bound_x = READ_REG(ADDR_BOUND_X);
-    uint32_t bound_y = READ_REG(ADDR_BOUND_Y);
 
-    // Mask to 10 bits as defined in the Verilog code [9:0]
-    bound_x &= 0x3FF;
-    bound_y &= 0x3FF;
+#define TEST_WORD_IDX   (FRAME_WORDS + 10000u)   // scratch address, outside the frame
 
-    printf("--- Boundary Registers ---\n");
-    // Standard printf handles unsigned %u and padded 8-character hex %08X seamlessly
-    printf("Boundary X: %u (Target Byte Addr: 0x%08X)\n", bound_x, (unsigned int)ADDR_BOUND_X);
-    printf("Boundary Y: %u (Target Byte Addr: 0x%08X)\n\n", bound_y, (unsigned int)ADDR_BOUND_Y);
 
-    // 2. Read Linear Template Array (First 5 elements as a sample)
-    printf("--- Template Mirror Array (Linear Index Sample) ---\n");
-    for (int i = 0; i < 5; i++) {
-        uint32_t tmpl_val = READ_REG(ADDR_TMPL_REG(i)) & 0xFF; // Mask to 8 bits [7:0]
-        // Standard printf correctly maps %d to loop counts and %02X to padded 8-bit hex
-        printf("Template[%d]: 0x%02X (Target Byte Addr: 0x%08X)\n", i, (unsigned int)tmpl_val, (unsigned int)ADDR_TMPL_REG(i));
+static uint32_t read_settled(uint32_t addr)
+{
+    (void)READ_REG(addr);      // throwaway, absorb the stale value
+    return READ_REG(addr);     // this one should be current
+}
+
+// Write then read back, with a fence in between: NiosV appears to post
+// writes, so a load issued immediately after a store to the same address
+// can race ahead of it without this barrier.
+static uint32_t read_after_write(uint32_t addr, uint32_t wval)
+{
+    IOWR_32DIRECT(addr, 0, wval);
+    __asm__ __volatile__ ("fence" ::: "memory");
+    return READ_REG(addr);
+}
+
+static int avs2_selftest(void)
+{
+    int fail = 0;
+    for (uint32_t pat = 0; pat < 8; pat++) {
+        uint32_t wval = 0xA5A50000u | (pat << 8) | pat;
+        uint32_t rval = read_after_write(AVS2_WORD_ADDR(TEST_WORD_IDX), wval);
+        if (rval != wval) {
+            alt_printf("SELFTEST FAIL pat=%x wrote=%x read=%x\n", pat, wval, rval);
+            fail = 1;
+        }
     }
-    printf("\n");
+    if (!fail) alt_printf("SELFTEST PASS\n");
+    return fail;
+}
 
-    // 3. Read Template Array using 2D Grid Coordinates (Row 0, Col 0 to Col 3)
-    printf("--- Template Mirror Array (2D Matrix Sample) ---\n");
-    int target_row = 0;
-    for (int target_col = 0; target_col < 4; target_col++) {
-        uint32_t tmpl_val = READ_REG(ADDR_TMPL_XY(target_row, target_col)) & 0xFF;
-        printf("Template[Row %d][Col %d]: 0x%02X (Target Byte Addr: 0x%08X)\n", 
-               target_row, target_col, (unsigned int)tmpl_val, (unsigned int)ADDR_TMPL_XY(target_row, target_col));
+static void send_all(int fd, const uint8_t *buf, size_t len)
+{
+    size_t sent = 0;
+    while (sent < len) {
+        ssize_t n = write(fd, buf + sent, len - sent);
+        if (n <= 0) {
+            // JTAG UART not ready / host not reading yet - just retry.
+            continue;
+        }
+        sent += (size_t)n;
+    }
+}
+
+static void send_frame(int fd)
+{
+    uint8_t header[13];
+    uint32_t checksum = 0;
+    uint32_t i;
+
+    // Construct the "FRAM" header protocol
+    header[0] = 'F'; header[1] = 'R'; header[2] = 'A'; header[3] = 'M';
+    header[4] = (uint8_t)(FRAME_WIDTH & 0xFF);
+    header[5] = (uint8_t)((FRAME_WIDTH >> 8) & 0xFF);
+    header[6] = (uint8_t)(FRAME_HEIGHT & 0xFF);
+    header[7] = (uint8_t)((FRAME_HEIGHT >> 8) & 0xFF);
+    header[8] = 0x02; // format = raw interlaced YCbCr422, 1 sample per word, still-blanked
+    header[9]  = (uint8_t)(FRAME_BYTES & 0xFF);
+    header[10] = (uint8_t)((FRAME_BYTES >> 8) & 0xFF);
+    header[11] = (uint8_t)((FRAME_BYTES >> 16) & 0xFF);
+    header[12] = (uint8_t)((FRAME_BYTES >> 24) & 0xFF);
+
+    // Transmit protocol header
+    send_all(fd, header, sizeof(header));
+
+    // Memory sweep loop over the AVS2 address space.
+    // No CPU write happens here (this is pure read of camera-written data),
+    // so no fence is needed - the posted-write hazard only applies between
+    // a store and a load to the same address from THIS core.
+    for (i = 0; i < FRAME_WORDS; i++) {
+        // Read 32-bit register directly from the generated word address pointer.
+        // Only the low 16 bits are meaningful (WR1_DATA is 16 bits wide);
+        // upper 16 bits are always 0.
+        uint32_t w = read_settled(AVS2_WORD_ADDR(i));
+        uint8_t px[2];
+
+        px[0] = (uint8_t)( w       & 0xFF); // low byte of raw sample
+        px[1] = (uint8_t)((w >> 8) & 0xFF); // high byte of raw sample
+
+        checksum += (uint32_t)px[0] + px[1];
+
+        // Send raw sample bytes to the JTAG interface
+        send_all(fd, px, 2);
     }
 
+    // Send trailing verification checksum
+    {
+        uint8_t csum_bytes[4];
+        csum_bytes[0] = (uint8_t)(checksum & 0xFF);
+        csum_bytes[1] = (uint8_t)((checksum >> 8) & 0xFF);
+        csum_bytes[2] = (uint8_t)((checksum >> 16) & 0xFF);
+        csum_bytes[3] = (uint8_t)((checksum >> 24) & 0xFF);
+        send_all(fd, csum_bytes, 4);
+    }
+}
+
+int main(void)
+{
+    int fd;
+    uint8_t cmd;
+
+    alt_printf("Doing the self-test of the AVS2 Avalon-MM interface...\n");
+    // if (avs2_selftest() != 0) {
+    //     alt_printf("ERROR: AVS2 self-test failed, aborting.\n");
+    //     return -1;
+    // }
+
+    alt_printf("NiosV frame-grab firmware ready.\n");
+    alt_printf("Send 'S' over the JTAG UART to capture+send one frame.\n");
+
+    // Replace JTAG_UART_0_NAME with the exact literal string if not defined in system.h (e.g. "/dev/juart")
+    fd = open(JTAG_UART_0_NAME, O_RDWR);
+    if (fd < 0) {
+        alt_printf("ERROR: could not open JTAG UART interface\n");
+        return -1;
+    }
+
+    while (1) {
+        alt_printf("Waiting for host command...\n");
+
+        ssize_t n = read(fd, &cmd, 1);
+        if (n <= 0) {
+            continue;
+        }
+
+        if (cmd == 'S') {
+            send_frame(fd);
+        }
+    }
+
+    close(fd);
     return 0;
 }
