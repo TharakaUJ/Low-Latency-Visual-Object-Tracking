@@ -199,8 +199,11 @@ wire					av_done;
 //	Turn On TV Decoder
 assign	TD_RESET_N	=	1'b1;
 
-assign	LEDG	=	VGA_Y;
-assign	LEDR	=	VGA_X;
+// assign LEDG = av_rdata[8:0];
+assign LEDG[0] = NTSC;
+assign LEDG[1] = PAL;
+assign LEDG[2] = TD_Stable;
+assign LEDR = av_rdata[27:9];
 
 assign	m1VGA_Read	=	VGA_Y[0]		?	1'b0		:	VGA_Read	;
 assign	m2VGA_Read	=	VGA_Y[0]		?	VGA_Read	:	1'b0		;
@@ -312,7 +315,7 @@ Sdram_Control_4Port	u6	(	//	HOST Side
 				            .CAS_N(DRAM_CAS_N),
 				            .WE_N(DRAM_WE_N),
 						    .DQ(DRAM_DQ),
-				            .DQM({DRAM_DQM[1],DRAM_DQM[0]}),
+				            .DQM(DRAM_DQM),
 							.SDR_CLK(DRAM_CLK),
 							.CLK(sdram_core_clk),
 							//	NiosV on-demand port

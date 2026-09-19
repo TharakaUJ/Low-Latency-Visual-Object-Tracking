@@ -46,6 +46,19 @@ def find_terminal_tool(explicit):
         "Pass --tool <name-or-full-path>, or add Quartus's bin directory to PATH."
     )
 
+def decode_raw(grid):                       # grid: (576, 640) uint16
+    Y = (grid >> 8).astype(np.float32)
+    C = (grid & 0xFF).astype(np.float32)
+    cr = np.repeat(C[:, 0::2], 2, axis=1) - 128   # even cols -> Cr
+    cb = np.repeat(C[:, 1::2], 2, axis=1) - 128   # odd  cols -> Cb  (swap if colours look off)
+    rgb = np.stack([Y + 1.402*cr,
+                    Y - 0.344*cb - 0.714*cr,
+                    Y + 1.772*cb], -1)
+    rgb = np.clip(rgb, 0, 255).astype(np.uint8)
+    half = grid.shape[0] // 2
+    out = np.empty_like(rgb)
+    out[0::2], out[1::2] = rgb[:half], rgb[half:]  # weave the two fields
+    return out
 
 def open_jtag_pipe(tool, instance):
     cmd = [tool]
@@ -128,6 +141,26 @@ def ycbcr422_to_rgb(payload: bytes, width: int, height: int) -> np.ndarray:
     return out.reshape(height, width, 3)
 
 
+def raw_samples_to_grayscale(payload: bytes, width: int, height: int) -> np.ndarray:
+    """format 0x02: payload is width*height raw 16-bit YCbCr422 samples,
+    LE, one sample per SDRAM word (only the low 16 bits were meaningful on
+    the FPGA side). Still interlaced, still includes blanking - this is a
+    first-look decode only: high byte of each 16-bit sample as grayscale,
+    reshaped straight into the raw (height, width) grid with no
+    deinterlacing/blanking-crop/chroma handling yet."""
+    arr = np.frombuffer(payload, dtype="<u2")  # little-endian uint16
+    expected = width * height
+    if arr.size != expected:
+        raise ValueError(
+            f"Payload has {arr.size} samples, expected {expected} "
+            f"({width}x{height}) - geometry mismatch?"
+        )
+    grid = arr.reshape(height, width)
+    # crude grayscale preview: low byte of each raw sample
+    gray = (grid & 0xFF).astype(np.uint8)
+    return grid, gray
+
+
 def grab_frame(tool, instance, out_path):
     proc = open_jtag_pipe(tool, instance)
     try:
@@ -141,7 +174,7 @@ def grab_frame(tool, instance, out_path):
         rest = read_exact(stdout, HEADER_LEN_AFTER_MAGIC)
         width, height, fmt, payload_len = struct.unpack("<HHBI", rest)
 
-        if fmt != 0x01:
+        if fmt not in (0x01, 0x02):
             raise ValueError(f"Unsupported pixel format code 0x{fmt:02X}")
 
         print(f"Header OK: {width}x{height}, format=0x{fmt:02X}, payload={payload_len} bytes")
@@ -157,11 +190,22 @@ def grab_frame(tool, instance, out_path):
         else:
             print("Checksum OK.")
 
-        rgb = ycbcr422_to_rgb(payload, width, height)
-        img = Image.fromarray(rgb, mode="RGB")
-        img.save(out_path)
-        print(f"Saved frame to {out_path}")
-        img.show()
+        if fmt == 0x01:
+            rgb = ycbcr422_to_rgb(payload, width, height)
+            img = Image.fromarray(rgb, mode="RGB")
+            img.save(out_path)
+            print(f"Saved frame to {out_path}")
+            img.show()
+        else:  # fmt == 0x02: raw, still-interlaced, still-blanked samples
+            grid, gray = raw_samples_to_grayscale(payload, width, height)
+            npy_path = out_path.rsplit(".", 1)[0] + "_raw.npy"
+            np.save(npy_path, grid)
+            print(f"Saved raw {width}x{height} uint16 sample grid to {npy_path}")
+            img = Image.fromarray(decode_raw(grid))
+            img.save(out_path)
+            print(f"Saved grayscale preview to {out_path} "
+                  f"(raw/interlaced/blanked - not a clean decoded picture yet)")
+            img.show()
 
     finally:
         proc.terminate()

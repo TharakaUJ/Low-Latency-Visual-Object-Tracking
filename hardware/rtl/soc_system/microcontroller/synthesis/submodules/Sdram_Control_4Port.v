@@ -375,6 +375,13 @@ begin
 		//	 "Auto Read/Write Control" always block below, to avoid a
 		//	 multiple-driver conflict - this block only reads them)
 		AV_DONE	<=	0;
+		//	Capture AV_RDATA at the SAME cycle timing the RD1/RD2 FIFOs use
+		//	(OUT_VALID), which is CAS-latency-correct. Sampling on mRD_DONE
+		//	instead (one cycle later) grabs mDATAOUT after it has already
+		//	moved past the valid DQ window, returning stale/garbage data.
+		if(AV_ACTIVE_RD && OUT_VALID)
+			AV_RDATA	<=	mDATAOUT;
+
 		if(AV_ACTIVE_WR && mWR_DONE)
 		begin
 			mAVWR		<=	0;
@@ -383,7 +390,6 @@ begin
 		if(AV_ACTIVE_RD && mRD_DONE)
 		begin
 			mAVRD		<=	0;
-			AV_RDATA	<=	mDATAOUT;
 			AV_DONE		<=	1;
 		end
 		case(ST)

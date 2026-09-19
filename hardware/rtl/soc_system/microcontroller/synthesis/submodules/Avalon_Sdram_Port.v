@@ -56,19 +56,28 @@ reg              busy;
 
 wire             new_req = (avs_read || avs_write) && !busy;
 
-// waitrequest stays high for the whole transaction: on the accepting
-// cycle (new_req) and every cycle busy is set, until ack_edge_avs clears it
-assign avs_waitrequest = busy || (avs_read || avs_write);
+// data_valid_pulse is ack_edge_avs delayed by one avs_clk cycle, so it is
+// high in EXACTLY the cycle avs_readdata/busy actually update (registered
+// outputs of the "busy && ack_edge_avs" branch below take one cycle to
+// become visible). Driving avs_waitrequest off ack_edge_avs directly would
+// deassert it a cycle too early, before avs_readdata is valid - masters
+// would then latch stale data. This can't be gated on busy (busy has
+// already cleared by the time data_valid_pulse fires), so it's tracked
+// as its own one-shot register instead.
+reg data_valid_pulse;
+assign avs_waitrequest = (avs_read || avs_write) && !data_valid_pulse;
 
 always @(posedge avs_clk or negedge avs_reset_n) begin
     if(!avs_reset_n) begin
-        req_tog      <= 1'b0;
-        busy         <= 1'b0;
-        req_is_write <= 1'b0;
-        req_addr     <= {ASIZE{1'b0}};
-        req_wdata    <= {DSIZE{1'b0}};
-        avs_readdata <= {DSIZE{1'b0}};
+        req_tog          <= 1'b0;
+        busy             <= 1'b0;
+        req_is_write     <= 1'b0;
+        req_addr         <= {ASIZE{1'b0}};
+        req_wdata        <= {DSIZE{1'b0}};
+        avs_readdata     <= {DSIZE{1'b0}};
+        data_valid_pulse <= 1'b0;
     end else begin
+        data_valid_pulse <= (busy && ack_edge_avs);
         if(new_req) begin
             req_is_write <= avs_write;
             req_addr     <= avs_address;
@@ -77,7 +86,7 @@ always @(posedge avs_clk or negedge avs_reset_n) begin
             busy         <= 1'b1;
         end
         else if(busy && ack_edge_avs) begin
-            avs_readdata <= sdram_rdata_sync;
+            avs_readdata <= rdata_hold; // Sample safely here
             busy         <= 1'b0;
         end
     end
@@ -97,10 +106,6 @@ always @(posedge avs_clk or negedge avs_reset_n) begin
     end
 end
 wire ack_edge_avs = ack_tog_sync ^ ack_tog_sync_d;
-
-// hold the read-data result stable for avs_clk to sample on ack_edge_avs
-reg [DSIZE-1:0] sdram_rdata_sync;
-always @(posedge avs_clk) sdram_rdata_sync <= rdata_hold;
 
 //=========================================================================
 // sdram_clk domain: synchronize the request toggle, run the transaction
