@@ -1,171 +1,218 @@
-#include <sys/alt_stdio.h>   // alt_printf
+// ============================================================================
+// main.c - unified NiosV firmware: frame grab + template load + boundary read
+//
+// Single-byte commands from the host over the JTAG UART:
+//   'S'            freeze SDRAM writes, send raw frame  (format 0x02), unfreeze
+//   'Y'            same but luma only, 1 byte/sample     (format 0x03), unfreeze
+//   'T' + 256 B    load 16x16 template (row-major, luma), reply "TACK"+nbad
+//   'R'            read template mirror back,           reply "TMPL"+256 B
+//   'B'            read boundary,                       reply "BNDS"+x16+y16
+//   'F' / 'U'      manual freeze / unfreeze,            reply "FRZN"+state
+//
+// Every reply starts with a 4-byte magic so the host can resync past any
+// boot-banner text. Do NOT alt_printf anything after start-up: it would be
+// interleaved with binary data on the same UART.
+// ============================================================================
+#include <sys/alt_stdio.h>
 #include <stdint.h>
-#include <io.h>              // IORD_32DIRECT / IOWR_32DIRECT (cache-bypassing)
-#include <fcntl.h>           // open()
-#include <unistd.h>          // read()/write()/close()
+#include <stddef.h>
+#include <io.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <system.h>
 
-// ============================================================================
-// avs2 Avalon-MM Slave Base Address (NiosV -> Sdram_Control_4Port AV_* port)
-// ============================================================================
-#define AVS2_BASE               0x01000000u
+// ---- Avalon slave #1 (avalon_slave_top): bounds, template, control ---------
+#define AVS_BASE          0x00022000u
+#define AVS_REG(idx)      (AVS_BASE + ((idx) * 4u))
+#define REG_BOUND_X       0u
+#define REG_BOUND_Y       1u
+#define REG_TMPL_BASE     2u
+#define REG_CTRL          (REG_TMPL_BASE + 256u)   // word 258
+#define CTRL_FREEZE       0x1u                     // write: freeze SDRAM writes
+#define CTRL_FROZEN       0x2u                     // read : writes really stopped
+#define WIN               16u
+#define TMPL_CNT          (WIN * WIN)
 
-// ============================================================================
-// Frame geometry / pixel format
-//
-// NOTE: this matches the ACTUAL raw capture buffer wired in DE2_115_TV.v
-// (WR1_ADDR=0, WR1_MAX_ADDR=640*576 for NTSC=0/PAL), NOT a 720x480 frame.
-// The camera writer (WR1_DATA) is only 16 bits wide - each 32-bit SDRAM
-// word holds exactly ONE raw YCbCr422 sample (upper 16 bits are always 0),
-// not two packed pixels. This is the simplest possible readout: the raw,
-// still-interlaced, still-including-blanking capture buffer, dumped as-is.
-// Deinterlacing / blanking removal / YCbCr->RGB is left to the host script.
-// ============================================================================
-#define FRAME_WIDTH               640u          // raw samples per line (incl. blanking)
-#define FRAME_HEIGHT              576u          // raw lines, both interlaced fields (PAL)
-#define FRAME_WORDS               (FRAME_WIDTH * FRAME_HEIGHT)  // 1 word = 1 sample
-#define FRAME_BYTES               (FRAME_WORDS * 2u)            // 2 bytes/sample (16-bit)
+// ---- Avalon slave #2: SDRAM framebuffer (one raw sample per 32-bit word) ---
+#define AVS2_BASE         0x01000000u
+#define AVS2_WORD_ADDR(i) (AVS2_BASE + ((i) * 4u))
+#define FRAME_WIDTH       640u
+#define FRAME_HEIGHT      576u
+#define FRAME_WORDS       (FRAME_WIDTH * FRAME_HEIGHT)
 
-// ============================================================================
-// Register access helpers (cache-bypassing, sweeps memory using word indexes)
-// ============================================================================
-#define READ_REG(addr)          IORD_32DIRECT((addr), 0)
-#define AVS2_WORD_ADDR(idx)     (AVS2_BASE + ((idx) * 4u))
+#define FMT_RAW16         0x02
+#define FMT_LUMA8         0x03
 
+// Polls of CTRL while waiting for the RTL to confirm the freeze. If no video
+// is present the RTL never sees a VS edge - but then nothing is being written
+// either, so we simply carry on after the timeout.
+#define FREEZE_POLL_MAX   2000000u
 
-#define TEST_WORD_IDX   (FRAME_WORDS + 10000u)   // scratch address, outside the frame
-
+#define READ_REG(addr)   IORD_32DIRECT((addr), 0)
 
 static uint32_t read_settled(uint32_t addr)
 {
-    (void)READ_REG(addr);      // throwaway, absorb the stale value
-    return READ_REG(addr);     // this one should be current
-}
-
-// Write then read back, with a fence in between: NiosV appears to post
-// writes, so a load issued immediately after a store to the same address
-// can race ahead of it without this barrier.
-static uint32_t read_after_write(uint32_t addr, uint32_t wval)
-{
-    IOWR_32DIRECT(addr, 0, wval);
-    __asm__ __volatile__ ("fence" ::: "memory");
+    (void)READ_REG(addr);   // throwaway, absorb stale value
     return READ_REG(addr);
 }
 
-static int avs2_selftest(void)
-{
-    int fail = 0;
-    for (uint32_t pat = 0; pat < 8; pat++) {
-        uint32_t wval = 0xA5A50000u | (pat << 8) | pat;
-        uint32_t rval = read_after_write(AVS2_WORD_ADDR(TEST_WORD_IDX), wval);
-        if (rval != wval) {
-            alt_printf("SELFTEST FAIL pat=%x wrote=%x read=%x\n", pat, wval, rval);
-            fail = 1;
-        }
-    }
-    if (!fail) alt_printf("SELFTEST PASS\n");
-    return fail;
-}
-
+// ---------------------------------------------------------------------------
+// UART helpers
+// ---------------------------------------------------------------------------
 static void send_all(int fd, const uint8_t *buf, size_t len)
 {
     size_t sent = 0;
     while (sent < len) {
         ssize_t n = write(fd, buf + sent, len - sent);
-        if (n <= 0) {
-            // JTAG UART not ready / host not reading yet - just retry.
-            continue;
-        }
-        sent += (size_t)n;
+        if (n > 0) sent += (size_t)n;   // else host not reading yet: retry
     }
 }
 
-static void send_frame(int fd)
+static void recv_all(int fd, uint8_t *buf, size_t len)
 {
-    uint8_t header[13];
-    uint32_t checksum = 0;
-    uint32_t i;
-
-    // Construct the "FRAM" header protocol
-    header[0] = 'F'; header[1] = 'R'; header[2] = 'A'; header[3] = 'M';
-    header[4] = (uint8_t)(FRAME_WIDTH & 0xFF);
-    header[5] = (uint8_t)((FRAME_WIDTH >> 8) & 0xFF);
-    header[6] = (uint8_t)(FRAME_HEIGHT & 0xFF);
-    header[7] = (uint8_t)((FRAME_HEIGHT >> 8) & 0xFF);
-    header[8] = 0x02; // format = raw interlaced YCbCr422, 1 sample per word, still-blanked
-    header[9]  = (uint8_t)(FRAME_BYTES & 0xFF);
-    header[10] = (uint8_t)((FRAME_BYTES >> 8) & 0xFF);
-    header[11] = (uint8_t)((FRAME_BYTES >> 16) & 0xFF);
-    header[12] = (uint8_t)((FRAME_BYTES >> 24) & 0xFF);
-
-    // Transmit protocol header
-    send_all(fd, header, sizeof(header));
-
-    // Memory sweep loop over the AVS2 address space.
-    // No CPU write happens here (this is pure read of camera-written data),
-    // so no fence is needed - the posted-write hazard only applies between
-    // a store and a load to the same address from THIS core.
-    for (i = 0; i < FRAME_WORDS; i++) {
-        // Read 32-bit register directly from the generated word address pointer.
-        // Only the low 16 bits are meaningful (WR1_DATA is 16 bits wide);
-        // upper 16 bits are always 0.
-        uint32_t w = read_settled(AVS2_WORD_ADDR(i));
-        uint8_t px[2];
-
-        px[0] = (uint8_t)( w       & 0xFF); // low byte of raw sample
-        px[1] = (uint8_t)((w >> 8) & 0xFF); // high byte of raw sample
-
-        checksum += (uint32_t)px[0] + px[1];
-
-        // Send raw sample bytes to the JTAG interface
-        send_all(fd, px, 2);
-    }
-
-    // Send trailing verification checksum
-    {
-        uint8_t csum_bytes[4];
-        csum_bytes[0] = (uint8_t)(checksum & 0xFF);
-        csum_bytes[1] = (uint8_t)((checksum >> 8) & 0xFF);
-        csum_bytes[2] = (uint8_t)((checksum >> 16) & 0xFF);
-        csum_bytes[3] = (uint8_t)((checksum >> 24) & 0xFF);
-        send_all(fd, csum_bytes, 4);
+    size_t got = 0;
+    while (got < len) {
+        ssize_t n = read(fd, buf + got, len - got);
+        if (n > 0) got += (size_t)n;
     }
 }
 
+static void send_u16(int fd, uint16_t v)
+{
+    uint8_t b[2] = { (uint8_t)(v & 0xFF), (uint8_t)(v >> 8) };
+    send_all(fd, b, 2);
+}
+
+// ---------------------------------------------------------------------------
+// SDRAM write freeze
+// ---------------------------------------------------------------------------
+static int sdram_freeze(void)
+{
+    IOWR_32DIRECT(AVS_REG(REG_CTRL), 0, CTRL_FREEZE);
+    for (uint32_t t = 0; t < FREEZE_POLL_MAX; t++)
+        if (read_settled(AVS_REG(REG_CTRL)) & CTRL_FROZEN) return 1;
+    return 0;   // timed out (no video?) - proceed anyway
+}
+
+static void sdram_unfreeze(void)
+{
+    IOWR_32DIRECT(AVS_REG(REG_CTRL), 0, 0);
+}
+
+static uint8_t freeze_state(void)
+{
+    return (uint8_t)(read_settled(AVS_REG(REG_CTRL)) & 0x3);
+}
+
+// ---------------------------------------------------------------------------
+// Commands
+// ---------------------------------------------------------------------------
+static void send_frame(int fd, uint8_t fmt)
+{
+    const uint32_t bytes_per_word = (fmt == FMT_RAW16) ? 2u : 1u;
+    const uint32_t payload_len    = FRAME_WORDS * bytes_per_word;
+    uint32_t checksum = 0;
+
+    sdram_freeze();
+
+    send_all(fd, (const uint8_t *)"FRAM", 4);
+    send_u16(fd, FRAME_WIDTH);
+    send_u16(fd, FRAME_HEIGHT);
+    send_all(fd, &fmt, 1);
+    send_u16(fd, (uint16_t)(payload_len & 0xFFFF));
+    send_u16(fd, (uint16_t)(payload_len >> 16));
+
+    for (uint32_t i = 0; i < FRAME_WORDS; i++) {
+        uint32_t w = read_settled(AVS2_WORD_ADDR(i));
+        uint8_t lo = (uint8_t)(w & 0xFF);         // chroma byte
+        uint8_t hi = (uint8_t)((w >> 8) & 0xFF);  // luma byte (YCbCr[15:8])
+
+        if (fmt == FMT_RAW16) {
+            uint8_t px[2] = { lo, hi };
+            checksum += (uint32_t)lo + hi;
+            send_all(fd, px, 2);
+        } else {
+            checksum += hi;
+            send_all(fd, &hi, 1);
+        }
+    }
+
+    uint8_t cs[4] = { (uint8_t)checksum, (uint8_t)(checksum >> 8),
+                      (uint8_t)(checksum >> 16), (uint8_t)(checksum >> 24) };
+    send_all(fd, cs, 4);
+
+    sdram_unfreeze();
+}
+
+static void cmd_load_template(int fd)
+{
+    uint8_t t[TMPL_CNT];
+    recv_all(fd, t, TMPL_CNT);
+
+    for (uint32_t i = 0; i < TMPL_CNT; i++)
+        IOWR_32DIRECT(AVS_REG(REG_TMPL_BASE + i), 0, t[i]);
+
+    // avs_waitrequest stays high until the last CDC write is acked, so these
+    // reads cannot complete before the final write has landed in the real array.
+    uint32_t bad = 0;
+    for (uint32_t i = 0; i < TMPL_CNT; i++)
+        if ((read_settled(AVS_REG(REG_TMPL_BASE + i)) & 0xFF) != t[i]) bad++;
+
+    uint8_t b = (bad > 255) ? 255 : (uint8_t)bad;
+    send_all(fd, (const uint8_t *)"TACK", 4);
+    send_all(fd, &b, 1);
+}
+
+static void cmd_read_template(int fd)
+{
+    uint8_t t[TMPL_CNT];
+    for (uint32_t i = 0; i < TMPL_CNT; i++)
+        t[i] = (uint8_t)(read_settled(AVS_REG(REG_TMPL_BASE + i)) & 0xFF);
+    send_all(fd, (const uint8_t *)"TMPL", 4);
+    send_all(fd, t, TMPL_CNT);
+}
+
+static void cmd_boundary(int fd)
+{
+    uint16_t x = (uint16_t)(read_settled(AVS_REG(REG_BOUND_X)) & 0x3FF);
+    uint16_t y = (uint16_t)(read_settled(AVS_REG(REG_BOUND_Y)) & 0x3FF);
+    send_all(fd, (const uint8_t *)"BNDS", 4);
+    send_u16(fd, x);
+    send_u16(fd, y);
+}
+
+// ---------------------------------------------------------------------------
 int main(void)
 {
-    int fd;
-    uint8_t cmd;
+    alt_printf("NiosV tracker firmware ready. Cmds: S Y T R B F U\n");
 
-    alt_printf("Doing the self-test of the AVS2 Avalon-MM interface...\n");
-    // if (avs2_selftest() != 0) {
-    //     alt_printf("ERROR: AVS2 self-test failed, aborting.\n");
-    //     return -1;
-    // }
-
-    alt_printf("NiosV frame-grab firmware ready.\n");
-    alt_printf("Send 'S' over the JTAG UART to capture+send one frame.\n");
-
-    // Replace JTAG_UART_0_NAME with the exact literal string if not defined in system.h (e.g. "/dev/juart")
-    fd = open(JTAG_UART_0_NAME, O_RDWR);
+    int fd = open(JTAG_UART_0_NAME, O_RDWR);
     if (fd < 0) {
-        alt_printf("ERROR: could not open JTAG UART interface\n");
+        alt_printf("ERROR: could not open JTAG UART\n");
         return -1;
     }
 
+    sdram_unfreeze();   // make sure we never boot into a frozen display
+
     while (1) {
-        alt_printf("Waiting for host command...\n");
+        uint8_t cmd;
+        if (read(fd, &cmd, 1) <= 0) continue;
 
-        ssize_t n = read(fd, &cmd, 1);
-        if (n <= 0) {
-            continue;
+        switch (cmd) {
+        case 'S': send_frame(fd, FMT_RAW16);  break;
+        case 'Y': send_frame(fd, FMT_LUMA8);  break;
+        case 'T': cmd_load_template(fd);      break;
+        case 'R': cmd_read_template(fd);      break;
+        case 'B': cmd_boundary(fd);           break;
+        case 'F': case 'U': {
+            if (cmd == 'F') sdram_freeze(); else sdram_unfreeze();
+            uint8_t s = freeze_state();
+            send_all(fd, (const uint8_t *)"FRZN", 4);
+            send_all(fd, &s, 1);
+            break;
         }
-
-        if (cmd == 'S') {
-            send_frame(fd);
+        default: break;   // ignore stray bytes (e.g. newlines)
         }
     }
-
-    close(fd);
     return 0;
 }
