@@ -29,12 +29,17 @@ module avalon_slave_top #(
     output reg                     tmpl_wr_req,    // 1-cycle pulse: "please write"
     output reg  [IDX_WIDTH-1:0]    tmpl_wr_index,  // row*WIN + col
     output reg  [7:0]              tmpl_wr_data,
-    input  wire                    tmpl_wr_ack     // 1-cycle pulse: write applied
+    input  wire                    tmpl_wr_ack,    // 1-cycle pulse: write applied
+
+    // ---- SDRAM-write freeze control (CTRL register) ----
+    output reg                     freeze_req,     // bit0 of CTRL (clk_50 domain)
+    input  wire                    frozen_status   // synced-in: SDRAM writes really stopped
 );
 
     localparam [ADDR_WIDTH-1:0] ADDR_BOUND_X  = 'd0;
     localparam [ADDR_WIDTH-1:0] ADDR_BOUND_Y  = 'd1;
     localparam [ADDR_WIDTH-1:0] ADDR_TMPL_BASE = 'd2;
+    localparam [ADDR_WIDTH-1:0] ADDR_CTRL      = ADDR_TMPL_BASE + TMPL_CNT; // word 258, byte 0x408
 
     wire is_tmpl_addr = (avs_address >= ADDR_TMPL_BASE) &&
                          (avs_address < ADDR_TMPL_BASE + TMPL_CNT);
@@ -64,6 +69,7 @@ module avalon_slave_top #(
             tmpl_wr_index <= '0;
             tmpl_wr_data  <= '0;
             avs_readdata  <= '0;
+            freeze_req    <= 1'b0;
             for (i = 0; i < TMPL_CNT; i = i + 1)
                 tmpl_mirror[i] <= 8'hFF;   // matches template_match's reset default
         end else begin
@@ -79,6 +85,10 @@ module avalon_slave_top #(
             end else if (busy && tmpl_wr_ack) begin
                 busy <= 1'b0;
             end
+            // CTRL register: bit0 = freeze SDRAM writes
+            if (!busy && avs_write && avs_address == ADDR_CTRL)
+                freeze_req <= avs_writedata[0];
+
             // writes to ADDR_BOUND_X/Y or out-of-range addresses are ignored
             // (bound regs are outputs of the design, not configurable)
 
@@ -90,6 +100,8 @@ module avalon_slave_top #(
                     avs_readdata <= {{(DATA_WIDTH-10){1'b0}}, bound_y};
                 else if (is_tmpl_addr)
                     avs_readdata <= {{(DATA_WIDTH-8){1'b0}}, tmpl_mirror[tmpl_index]};
+                else if (avs_address == ADDR_CTRL)
+                    avs_readdata <= {{(DATA_WIDTH-2){1'b0}}, frozen_status, freeze_req};
                 else
                     avs_readdata <= {DATA_WIDTH{1'b0}};
             end

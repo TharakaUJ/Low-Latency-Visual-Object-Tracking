@@ -217,6 +217,34 @@ assign	Tmp3	=	Tmp1[8:2]+m3YCbCr[7:1];
 assign	Tmp4	=	Tmp2[8:2]+m3YCbCr[15:9];
 assign	m5YCbCr	=	{Tmp4,Tmp3};
 
+// ---------------------------------------------------------------------------
+// SDRAM write freeze. Only the SDRAM write enable is gated; process_top keeps
+// receiving the live Y stream. State changes ONLY on a TD_VS rising edge so a
+// frame is never cut mid-line. `fld` toggles on every VS edge and we only
+// RESUME on an edge with the same parity we froze on, so an even number of VS
+// periods is skipped and the SDRAM write pointer stays aligned with the stream
+// (otherwise fields/halves of the buffer would swap after unfreezing).
+// ---------------------------------------------------------------------------
+wire freeze_req_27;
+reg  wr_frozen, td_vs_d, fld, fld_at_freeze;
+wire td_vs_rise = TD_VS & ~td_vs_d;
+always @(posedge TD_CLK27 or negedge reset_n) begin
+    if (!reset_n) begin
+        wr_frozen <= 1'b0; td_vs_d <= 1'b0; fld <= 1'b0; fld_at_freeze <= 1'b0;
+    end else begin
+        td_vs_d <= TD_VS;
+        if (td_vs_rise) begin
+            fld <= ~fld;
+            if (!wr_frozen && freeze_req_27) begin
+                wr_frozen     <= 1'b1;
+                fld_at_freeze <= fld;
+            end else if (wr_frozen && !freeze_req_27 && (fld == fld_at_freeze)) begin
+                wr_frozen     <= 1'b0;
+            end
+        end
+    end
+end
+
 // custom processing
 process_top process_top_inst (
     .clk(TD_CLK27),
@@ -236,7 +264,9 @@ process_top process_top_inst (
     .TV_X(TV_X),
     .boundary_x(boundary_x),
     .boundary_y(boundary_y),
-	.debug_data(debug_data)
+	.debug_data(debug_data),
+	.freeze_req_clk(freeze_req_27),
+	.frozen_clk(wr_frozen)
 );
 							
 //	TV Decoder Stable Check
@@ -283,7 +313,7 @@ Sdram_Control_4Port	u6	(	//	HOST Side
 						    .RESET_N(DLY0),
 							//	FIFO Write Side 1
 						    .WR1_DATA(YCbCr),
-							.WR1(TV_DVAL),
+							.WR1(TV_DVAL & ~wr_frozen),
 							.WR1_FULL(WR1_FULL),
 							.WR1_ADDR(0),
 							.WR1_MAX_ADDR(NTSC ? 640*507 : 640*576),		//	525-18

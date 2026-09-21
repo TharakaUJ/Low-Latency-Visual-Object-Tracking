@@ -23,7 +23,11 @@ module process_top #(
     output logic [9:0] boundary_x,
     output logic [9:0] boundary_y,
 
-    output logic [31:0] debug_data
+    output logic [31:0] debug_data,
+
+    // SDRAM write-freeze handshake with DE2_115_TV.v
+    output logic freeze_req_clk,   // synced into clk (27 MHz) domain
+    input  logic frozen_clk        // status from clk domain
 );
 
     localparam int IDX_WIDTH = $clog2(WIN*WIN);
@@ -183,6 +187,16 @@ module process_top #(
         .tmpl_wr_data    (tmpl_wr_data_clk)
     );
 
+    // CDC: freeze request 50 -> 27 MHz, frozen status 27 -> 50 MHz (level signals, 2-FF sync)
+    logic freeze_req_50, frozen_50;
+    logic [1:0] frz_req_sync, frozen_sync;
+    always_ff @(posedge clk or negedge rst_n)
+        if (!rst_n) frz_req_sync <= 2'b00; else frz_req_sync <= {frz_req_sync[0], freeze_req_50};
+    assign freeze_req_clk = frz_req_sync[1];
+    always_ff @(posedge clk_50 or negedge rst_n)
+        if (!rst_n) frozen_sync <= 2'b00; else frozen_sync <= {frozen_sync[0], frozen_clk};
+    assign frozen_50 = frozen_sync[1];
+
     avalon_slave_top #(
         .DATA_WIDTH (32),
         .WIN        (WIN)
@@ -200,6 +214,8 @@ module process_top #(
         .tmpl_wr_req    (tmpl_wr_req_50),
         .tmpl_wr_index  (tmpl_wr_index_50),
         .tmpl_wr_data   (tmpl_wr_data_50),
-        .tmpl_wr_ack    (tmpl_wr_ack_50)
+        .tmpl_wr_ack    (tmpl_wr_ack_50),
+        .freeze_req     (freeze_req_50),
+        .frozen_status  (frozen_50)
     );
 endmodule
