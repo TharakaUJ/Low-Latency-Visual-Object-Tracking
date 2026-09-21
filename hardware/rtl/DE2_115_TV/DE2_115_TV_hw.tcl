@@ -69,6 +69,7 @@ add_fileset_file window_buffer.sv      SYSTEM_VERILOG PATH ../processing/window_
 add_fileset_file template_match.sv     SYSTEM_VERILOG PATH ../processing/template_match.sv
 add_fileset_file process_top.sv        SYSTEM_VERILOG PATH ../processing/process_top.sv
 add_fileset_file line_buffer.sv        SYSTEM_VERILOG PATH ../processing/line_buffer.sv
+add_fileset_file field_gate.sv        SYSTEM_VERILOG PATH ../processing/field_gate.sv
 
 add_fileset SIM_VERILOG SIM_VERILOG "" ""
 set_fileset_property SIM_VERILOG TOP_LEVEL DE2_115_TV

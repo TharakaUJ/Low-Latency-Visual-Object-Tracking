@@ -23,7 +23,7 @@ import numpy as np
 
 W, H, WIN = 640, 576, 16
 HALF = H // 2
-MAGICS = (b"FRAM", b"TACK", b"TMPL", b"BNDS", b"FRZN")
+MAGICS = (b"FRAM", b"TACK", b"TMPL", b"BNDS", b"FRZN", b"PONG")
 
 
 # ----------------------------------------------------------------------------
@@ -48,7 +48,7 @@ def raw_to_rgb(grid: np.ndarray) -> np.ndarray:
     return weave(np.clip(rgb, 0, 255).astype(np.uint8))
 
 
-def click_to_template(y_plane: np.ndarray, x: int, y: int):
+def click_to_template(y_plane: np.ndarray, x: int, y: int, field=None):
     """
     y_plane : (576,640) uint8 luma in BUFFER layout (fields not woven).
     x, y    : click position in the WOVEN image.
@@ -58,7 +58,7 @@ def click_to_template(y_plane: np.ndarray, x: int, y: int):
     (16 field lines = 32 woven rows).
     Returns (template 16x16 uint8, (col0, row0) top-left in field coords).
     """
-    f, fy = y & 1, y >> 1
+    f, fy = (y & 1) if field is None else field, y >> 1   # field: force 0/1 (else follow the click)
     r0 = int(np.clip(fy - WIN // 2, 0, HALF - WIN))
     c0 = int(np.clip(x - WIN // 2, 0, W - WIN))
     base = f * HALF
@@ -68,11 +68,15 @@ def click_to_template(y_plane: np.ndarray, x: int, y: int):
 # ----------------------------------------------------------------------------
 class NiosLink:
     def __init__(self, tool=None, instance=None):
-        tool = tool or next((t for t in ("juart-terminal", "nios2-terminal")
-                             if shutil.which(t)), None)
-        if not tool:
-            raise SystemExit("juart-terminal / nios2-terminal not on PATH")
-        cmd = [tool] + (["--instance", str(instance)] if instance is not None else [])
+        if isinstance(tool, (list, tuple)):          # full command (used by the mock in sim/)
+            cmd = list(tool)
+        else:
+            tool = tool or next((t for t in ("juart-terminal", "nios2-terminal")
+                                 if shutil.which(t)), None)
+            if not tool:
+                raise SystemExit("juart-terminal / nios2-terminal not on PATH")
+            cmd = [tool] + (["--instance", str(instance)] if instance is not None else [])
+        self.rx_total = 0                            # every byte ever received (diagnostics)
         self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE,
                                      stderr=subprocess.DEVNULL, bufsize=0)
@@ -90,27 +94,44 @@ class NiosLink:
                 return
             self.q.put(chunk)
 
-    def _fill(self, deadline):
+    def _why(self, stage, secs):
+        seen = self.rx_total - self._rx_mark
+        tail = bytes(self.buf[-40:])
+        if seen == 0:
+            hint = ("NOTHING was received since the command was sent. Nios not running this firmware, "
+                    "stuck in an Avalon access, or another JTAG client (Eclipse debug, Quartus "
+                    "Programmer, another terminal) owns the connection.")
+        elif seen < 256 and not any(m in bytes(self.buf) for m in MAGICS):
+            hint = (f"only {seen} bytes arrived ({tail!r} - probably the boot banner). Firmware is alive "
+                    "but NOT ANSWERING: stuck in an Avalon access (e.g. waitrequest never released), "
+                    "or still busy with an earlier command.")
+        else:
+            hint = (f"{seen} bytes arrived but the transfer then went quiet. Last bytes: {tail!r}")
+        return f"{stage}: no data for {secs:.0f}s. {hint}"
+
+    def _fill(self, deadline, stage="read", secs=0):
         try:
             chunk = self.q.get(timeout=max(0.0, deadline - time.time()))
         except queue.Empty:
-            raise TimeoutError("no data from target")
+            raise TimeoutError(self._why(stage, secs))
         if chunk is None:
-            raise EOFError("JTAG UART terminal closed")
+            raise EOFError("JTAG UART terminal closed (juart-terminal exited)")
+        self.rx_total += len(chunk)
         self.buf += chunk
 
-    def _read(self, n, timeout=5.0, progress=None):
+    def _read(self, n, timeout=5.0, progress=None, stage="read"):
         deadline = time.time() + timeout
         while len(self.buf) < n:
-            self._fill(deadline)
+            self._fill(deadline, stage, timeout)
             deadline = time.time() + timeout      # inactivity timeout
             if progress:
                 progress(min(len(self.buf), n), n)
         data, self.buf = bytes(self.buf[:n]), self.buf[n:]
         return data
 
-    def _sync(self, want, timeout=5.0):
-        """Discard bytes (boot banner, junk) until one of `want` magics."""
+    def _sync(self, want, timeout=5.0, stage="sync"):
+        """Discard bytes (boot banner, junk) until one of `want` magics.
+        `timeout` is an INACTIVITY timeout: it restarts whenever bytes arrive."""
         deadline = time.time() + timeout
         while True:
             for m in want:
@@ -119,11 +140,51 @@ class NiosLink:
                     del self.buf[:i + 4]
                     return m
             self.buf = self.buf[-3:]              # keep possible partial magic
-            self._fill(deadline)
+            before = self.rx_total
+            self._fill(deadline, stage, timeout)
+            if self.rx_total != before:
+                deadline = time.time() + timeout
 
     def _send(self, data: bytes):
+        self._rx_mark = self.rx_total
         self.proc.stdin.write(data)
         self.proc.stdin.flush()
+
+    _rx_mark = 0
+
+    def drain(self, idle=1.0, max_total=120.0):
+        """Throw away everything the target is still sending until the line has been
+        quiet for `idle` seconds (e.g. an aborted earlier download still streaming).
+        Returns the number of bytes discarded."""
+        n, t0, last = 0, time.time(), time.time()
+        self.buf.clear()
+        while time.time() - t0 < max_total:
+            try:
+                c = self.q.get(timeout=0.1)
+            except queue.Empty:
+                if time.time() - last >= idle:
+                    break
+                continue
+            if c is None:
+                raise EOFError("JTAG UART terminal closed")
+            n += len(c); self.rx_total += len(c); last = time.time()
+        return n
+
+    def ping(self, auto_drain=True):
+        """Liveness check. Returns (state, drained_bytes); state bit0 = freeze requested,
+        bit1 = SDRAM writes really stopped."""
+        with self.lock:
+            drained = 0
+            for attempt in range(2):
+                try:
+                    self._send(b"P")
+                    self._sync([b"PONG"], timeout=3.0, stage="ping")
+                    return self._read(1, stage="ping")[0], drained
+                except TimeoutError:
+                    if not auto_drain or attempt:
+                        raise
+                    drained += self.drain()       # maybe an old transfer is still streaming
+            raise TimeoutError("ping failed")
 
     def _flush_input(self):
         time.sleep(0.05)
@@ -165,11 +226,12 @@ class NiosLink:
     def grab(self, luma_only=False, progress=None):
         """Returns (y_plane (576,640) uint8 in buffer layout, raw uint16 grid or None)."""
         with self.lock:
+            self.ping()                              # link alive + no stale stream from an old session
             self._send(b"Y" if luma_only else b"S")
-            self._sync([b"FRAM"], timeout=30)
+            self._sync([b"FRAM"], timeout=10, stage="waiting for frame header")
             w, h, fmt, n = struct.unpack("<HHBI", self._read(9))
             assert (w, h) == (W, H), f"unexpected geometry {w}x{h}"
-            payload = self._read(n, timeout=15, progress=progress)
+            payload = self._read(n, timeout=15, progress=progress, stage="downloading payload")
             (csum,) = struct.unpack("<I", self._read(4))
             ok = (int(np.frombuffer(payload, np.uint8).sum(dtype=np.uint64)) & 0xFFFFFFFF) == csum
             if fmt == 0x02:
@@ -187,7 +249,7 @@ class NiosLink:
 if __name__ == "__main__":
     from PIL import Image
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["grab", "boundary", "freeze", "unfreeze"])
+    ap.add_argument("cmd", choices=["ping", "grab", "boundary", "freeze", "unfreeze"])
     ap.add_argument("out", nargs="?", default="frame.png")
     ap.add_argument("--gray", action="store_true")
     ap.add_argument("--tool")
@@ -195,7 +257,11 @@ if __name__ == "__main__":
     a = ap.parse_args()
     link = NiosLink(a.tool, a.instance)
     try:
-        if a.cmd == "grab":
+        if a.cmd == "ping":
+            st, dr = link.ping()
+            print(f"link OK. ctrl state = {st:#04b} (bit0 freeze requested, bit1 SDRAM writes stopped)"
+                  + (f"; drained {dr} stale bytes first" if dr else ""))
+        elif a.cmd == "grab":
             yp, grid, ok = link.grab(a.gray, lambda d, t: print(f"\r{d}/{t}", end=""))
             print("\nchecksum", "OK" if ok else "MISMATCH")
             img = weave(yp) if grid is None else raw_to_rgb(grid)

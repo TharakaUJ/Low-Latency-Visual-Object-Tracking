@@ -8,6 +8,8 @@
 //   'R'            read template mirror back,           reply "TMPL"+256 B
 //   'B'            read boundary,                       reply "BNDS"+x16+y16
 //   'F' / 'U'      manual freeze / unfreeze,            reply "FRZN"+state
+//   'P'            ping,                                reply "PONG"+state
+//                  state: bit0 = freeze requested, bit1 = SDRAM writes really stopped
 //
 // Every reply starts with a 4-byte magic so the host can resync past any
 // boot-banner text. Do NOT alt_printf anything after start-up: it would be
@@ -46,7 +48,7 @@
 // Polls of CTRL while waiting for the RTL to confirm the freeze. If no video
 // is present the RTL never sees a VS edge - but then nothing is being written
 // either, so we simply carry on after the timeout.
-#define FREEZE_POLL_MAX   2000000u
+#define FREEZE_POLL_MAX   200000u   // ~ a few hundred ms; a field is 20 ms
 
 #define READ_REG(addr)   IORD_32DIRECT((addr), 0)
 
@@ -113,14 +115,16 @@ static void send_frame(int fd, uint8_t fmt)
     const uint32_t payload_len    = FRAME_WORDS * bytes_per_word;
     uint32_t checksum = 0;
 
-    sdram_freeze();
-
+    // Header goes out FIRST so the host knows we are alive even if the freeze
+    // handshake is slow or never completes (e.g. no video -> no TD_VS edges).
     send_all(fd, (const uint8_t *)"FRAM", 4);
     send_u16(fd, FRAME_WIDTH);
     send_u16(fd, FRAME_HEIGHT);
     send_all(fd, &fmt, 1);
     send_u16(fd, (uint16_t)(payload_len & 0xFFFF));
     send_u16(fd, (uint16_t)(payload_len >> 16));
+
+    sdram_freeze();
 
     for (uint32_t i = 0; i < FRAME_WORDS; i++) {
         uint32_t w = read_settled(AVS2_WORD_ADDR(i));
@@ -204,6 +208,12 @@ int main(void)
         case 'T': cmd_load_template(fd);      break;
         case 'R': cmd_read_template(fd);      break;
         case 'B': cmd_boundary(fd);           break;
+        case 'P': {
+            uint8_t s = freeze_state();
+            send_all(fd, (const uint8_t *)"PONG", 4);
+            send_all(fd, &s, 1);
+            break;
+        }
         case 'F': case 'U': {
             if (cmd == 'F') sdram_freeze(); else sdram_unfreeze();
             uint8_t s = freeze_state();

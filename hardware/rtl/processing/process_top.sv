@@ -1,7 +1,11 @@
 module process_top #(
     parameter int WIN = 16,
     parameter int IMG_W  = 640,
-    parameter int IMG_H  = 480
+    parameter int IMG_H  = 480,
+    // interlace handling (see field_gate.sv)
+    parameter bit DROP_SECOND_FIELD = 1'b1,
+    parameter bit VS_PER_FIELD      = 1'b1,   // 0 if TD_VS is once per frame
+    parameter int FIELD_LINES       = 288     // PAL 288, NTSC 253 (only used if VS_PER_FIELD=0)
 )(
     input logic clk,       // 27 MHz - pixel/processing domain
     input logic clk_50,    // 50 MHz - Avalon-MM domain
@@ -101,6 +105,18 @@ module process_top #(
         .dst_data  (bound_sync_50)
     );
 
+    logic dv_gated, search_start_g;
+    field_gate #(
+        .ENABLE       (DROP_SECOND_FIELD),
+        .VS_PER_FIELD (VS_PER_FIELD),
+        .FIELD_LINES  (FIELD_LINES),
+        .IMG_W        (IMG_W)
+    ) field_gate_inst (
+        .clk(clk), .rst_n(rst_n),
+        .dv_in(data_valid_in), .frame_done(frame_done),
+        .dv_out(dv_gated), .search_start(search_start_g)
+    );
+
     window_buffer #(
         .WIN   (WIN),
         .IMG_W (640),
@@ -108,7 +124,7 @@ module process_top #(
     ) window_buffer_inst (
         .clk          (clk),
         .rst_n        (rst_n),
-        .clock_enable (data_valid_in),
+        .clock_enable (dv_gated),
         .frame_done   (frame_done),
         .data_in      (Y),
         .window_out   (window),
@@ -174,7 +190,7 @@ module process_top #(
     ) template_match_inst (
         .clk             (clk),
         .rst_n           (rst_n),
-        .search_start    (frame_done),
+        .search_start    (search_start_g),
         .window_valid    (window_valid),
         .data_in         (window),
         .current_x       (anchor_x),

@@ -29,8 +29,9 @@ from niosv_link import NiosLink, W, H, WIN, weave, raw_to_rgb, click_to_template
 
 
 class App:
-    def __init__(self, root, link, gray, zoom):
+    def __init__(self, root, link, gray, zoom, field=None):
         self.root, self.link, self.zoom = root, link, zoom
+        self.field = field
         self.gray = tk.BooleanVar(value=gray)
         self.track = tk.BooleanVar(value=False)
         self.y_plane = None
@@ -47,7 +48,7 @@ class App:
         ttk.Checkbutton(bar, text="Track", variable=self.track,
                         command=self.poll).pack(side="left")
         self.status = tk.StringVar(value="Grab a frame, then click the target.")
-        ttk.Label(root, textvariable=self.status).pack(fill="x")
+        ttk.Label(root, textvariable=self.status, wraplength=W * zoom).pack(fill="x")
 
         self.canvas = tk.Canvas(root, width=W * zoom, height=H * zoom, bg="black")
         self.canvas.pack()
@@ -66,7 +67,7 @@ class App:
             try:
                 fn()
             except Exception as e:
-                self.set_status(f"ERROR: {e!r}")
+                self.set_status(f"ERROR ({type(e).__name__}): {e}")
             finally:
                 self.busy = False
         threading.Thread(target=run, daemon=True).start()
@@ -100,8 +101,9 @@ class App:
         if self.y_plane is None or self.busy:
             return
         x, y = ev.x // self.zoom, ev.y // self.zoom
-        tmpl, (c0, r0) = click_to_template(self.y_plane, x, y)
-        self.tmpl_tl, self.tmpl_field = (c0, r0), y & 1
+        tmpl, (c0, r0) = click_to_template(self.y_plane, x, y, self.field)
+        self.tmpl_tl = (c0, r0)
+        self.tmpl_field = (y & 1) if self.field is None else self.field
 
         z = self.zoom
         top_woven = 2 * r0 + self.tmpl_field
@@ -113,9 +115,12 @@ class App:
         def work():
             self.set_status("Sending template...")
             bad = self.link.load_template(tmpl)
+            tex = float(tmpl.std())
             self.set_status(
-                f"Template set from field {self.tmpl_field}, top-left (col {c0}, row {r0})."
-                + ("" if bad == 0 else f"  !! {bad} readback mismatches"))
+                f"Template set from field {self.tmpl_field}, top-left (col {c0}, row {r0}), "
+                f"texture (std) = {tex:.1f}."
+                + ("" if bad == 0 else f"  !! {bad} readback mismatches")
+                + ("" if tex >= 8 else "  WARNING: flat patch - matching will be ambiguous, pick a more textured spot."))
         self.bg(work)
 
     # -- boundary / calibration ---------------------------------------------
@@ -157,10 +162,20 @@ def main():
     ap.add_argument("--tool"); ap.add_argument("--instance", type=int)
     ap.add_argument("--gray", action="store_true", help="default to luma-only grabs")
     ap.add_argument("--zoom", type=int, default=1)
+    ap.add_argument("--field", type=int, choices=[0, 1], default=None,
+                    help="always cut the template from this field (match the field the FPGA keeps)")
     a = ap.parse_args()
     link = NiosLink(a.tool, a.instance)
     root = tk.Tk(); root.title("NiosV template tracker")
-    App(root, link, a.gray, a.zoom)
+    app = App(root, link, a.gray, a.zoom, a.field)
+    def _hello():
+        try:
+            st, dr = link.ping()
+            app.set_status(f"Link OK (ctrl={st:#04b})" + (f", drained {dr} stale bytes" if dr else "")
+                           + ". Grab a frame, then click the target.")
+        except Exception as e:
+            app.set_status(f"LINK PROBLEM: {e}")
+    threading.Thread(target=_hello, daemon=True).start()
     root.protocol("WM_DELETE_WINDOW", lambda: (link.close(), root.destroy()))
     root.mainloop()
 
