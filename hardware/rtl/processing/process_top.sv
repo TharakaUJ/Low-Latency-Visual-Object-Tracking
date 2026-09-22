@@ -1,7 +1,11 @@
 module process_top #(
     parameter int WIN = 16,
     parameter int IMG_W  = 640,
-    parameter int IMG_H  = 480
+    parameter int IMG_H  = 480,
+    // interlace handling (see field_gate.sv)
+    parameter bit DROP_SECOND_FIELD = 1'b1,
+    parameter bit VS_PER_FIELD      = 1'b1,   // 0 if TD_VS is once per frame
+    parameter int FIELD_LINES       = 288     // PAL 288, NTSC 253 (only used if VS_PER_FIELD=0)
 )(
     input logic clk,       // 27 MHz - pixel/processing domain
     input logic clk_50,    // 50 MHz - Avalon-MM domain
@@ -23,7 +27,11 @@ module process_top #(
     output logic [9:0] boundary_x,
     output logic [9:0] boundary_y,
 
-    output logic [31:0] debug_data
+    output logic [31:0] debug_data,
+
+    // SDRAM write-freeze handshake with DE2_115_TV.v
+    output logic freeze_req_clk,   // synced into clk (27 MHz) domain
+    input  logic frozen_clk        // status from clk domain
 );
 
     localparam int IDX_WIDTH = $clog2(WIN*WIN);
@@ -97,6 +105,18 @@ module process_top #(
         .dst_data  (bound_sync_50)
     );
 
+    logic dv_gated, search_start_g;
+    field_gate #(
+        .ENABLE       (DROP_SECOND_FIELD),
+        .VS_PER_FIELD (VS_PER_FIELD),
+        .FIELD_LINES  (FIELD_LINES),
+        .IMG_W        (IMG_W)
+    ) field_gate_inst (
+        .clk(clk), .rst_n(rst_n),
+        .dv_in(data_valid_in), .frame_done(frame_done),
+        .dv_out(dv_gated), .search_start(search_start_g)
+    );
+
     window_buffer #(
         .WIN   (WIN),
         .IMG_W (640),
@@ -104,7 +124,7 @@ module process_top #(
     ) window_buffer_inst (
         .clk          (clk),
         .rst_n        (rst_n),
-        .clock_enable (data_valid_in),
+        .clock_enable (dv_gated),
         .frame_done   (frame_done),
         .data_in      (Y),
         .window_out   (window),
@@ -170,7 +190,7 @@ module process_top #(
     ) template_match_inst (
         .clk             (clk),
         .rst_n           (rst_n),
-        .search_start    (frame_done),
+        .search_start    (search_start_g),
         .window_valid    (window_valid),
         .data_in         (window),
         .current_x       (anchor_x),
@@ -182,6 +202,16 @@ module process_top #(
         .tmpl_wr_index   (tmpl_wr_index_clk),
         .tmpl_wr_data    (tmpl_wr_data_clk)
     );
+
+    // CDC: freeze request 50 -> 27 MHz, frozen status 27 -> 50 MHz (level signals, 2-FF sync)
+    logic freeze_req_50, frozen_50;
+    logic [1:0] frz_req_sync, frozen_sync;
+    always_ff @(posedge clk or negedge rst_n)
+        if (!rst_n) frz_req_sync <= 2'b00; else frz_req_sync <= {frz_req_sync[0], freeze_req_50};
+    assign freeze_req_clk = frz_req_sync[1];
+    always_ff @(posedge clk_50 or negedge rst_n)
+        if (!rst_n) frozen_sync <= 2'b00; else frozen_sync <= {frozen_sync[0], frozen_clk};
+    assign frozen_50 = frozen_sync[1];
 
     avalon_slave_top #(
         .DATA_WIDTH (32),
@@ -200,6 +230,8 @@ module process_top #(
         .tmpl_wr_req    (tmpl_wr_req_50),
         .tmpl_wr_index  (tmpl_wr_index_50),
         .tmpl_wr_data   (tmpl_wr_data_50),
-        .tmpl_wr_ack    (tmpl_wr_ack_50)
+        .tmpl_wr_ack    (tmpl_wr_ack_50),
+        .freeze_req     (freeze_req_50),
+        .frozen_status  (frozen_50)
     );
 endmodule
