@@ -1,5 +1,5 @@
 module process_top #(
-    parameter int WIN = 16,
+    parameter int WIN = 32,
     parameter int IMG_W  = 640,
     parameter int IMG_H  = 480,
     // interlace handling (see field_gate.sv)

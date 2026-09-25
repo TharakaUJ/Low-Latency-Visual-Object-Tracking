@@ -21,7 +21,7 @@ import time
 
 import numpy as np
 
-W, H, WIN = 640, 576, 16
+W, H, WIN = 640, 576, 32
 HALF = H // 2
 MAGICS = (b"FRAM", b"TACK", b"TMPL", b"BNDS", b"FRZN", b"PONG")
 
