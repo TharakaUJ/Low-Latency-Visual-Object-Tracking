@@ -72,7 +72,11 @@ def main():
     ap.add_argument("--n-random", type=int, default=5000)
     ap.add_argument("--n-crops", type=int, default=5000)
     ap.add_argument("--images", nargs="*",
+<<<<<<< HEAD
                      default=["002675.jpg", "002683.jpg"])
+=======
+                     default=["../fpga_cnn_pipeline/002675.jpg", "../fpga_cnn_pipeline/002683.jpg"])
+>>>>>>> 99b8fe1 (get a working cnn in fpga)
     ap.add_argument("--out", default="results/P0/agreement.txt")
     args = ap.parse_args()
 

@@ -130,7 +130,11 @@ def main():
     ap.add_argument("--out", default="vectors")
     ap.add_argument("--n-tiles", type=int, default=1000)
     ap.add_argument("--images", nargs="*",
+<<<<<<< HEAD
                      default=["002675.jpg", "002683.jpg"])
+=======
+                     default=["../fpga_cnn_pipeline/002675.jpg", "../fpga_cnn_pipeline/002683.jpg"])
+>>>>>>> 99b8fe1 (get a working cnn in fpga)
     ap.add_argument("--strip-h", type=int, default=48)
     args = ap.parse_args()
 

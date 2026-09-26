@@ -1,0 +1,10 @@
+patches: 10000 (5000 random + 5000 crops from ['../fpga_cnn_pipeline/002675.jpg', '../fpga_cnn_pipeline/002683.jpg'])
+within +/-1 LSB: 99.98%  (gate: >=99.5%)
+argmax agreement: 100.00%  (gate: >=99.5%)
+max |diff| (logit code): 2
+
+first 2 mismatches (idx, ort_u8, int_u8):
+  4026: ort=[146, 107] int=[147, 105]
+  7690: ort=[163, 98] int=[164, 96]
+
+GATE P0: PASS

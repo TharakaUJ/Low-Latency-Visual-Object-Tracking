@@ -19,6 +19,7 @@ see docs/architecture.md) and emits everything the layer-pipelined RTL needs:
   gen/hw.hex          - head weights, 64 int4 values, order o*32+i
   gen/hb.hex          - head bias, 2 int32 values
 
+<<<<<<< HEAD
 This reuses onnx_to_rtl.py's find_conv_chain() (walks the
 Conv/QuantizeLinear/DequantizeLinear sandwich) and quantize_multiplier() (the
 TFLite-style M0/shift fixed-point requant scheme: real_multiplier == M0 *
@@ -26,6 +27,13 @@ TFLite-style M0/shift fixed-point requant scheme: real_multiplier == M0 *
 re-deriving them. (onnx_to_rtl.py was originally written for
 fpga_cnn_pipeline/ and copied here, unmodified, when that project was
 removed -- see docs/architecture.md.)
+=======
+This reuses fpga_cnn_pipeline/onnx_to_rtl.py's find_conv_chain() (walks the
+Conv/QuantizeLinear/DequantizeLinear sandwich) and quantize_multiplier() (the
+TFLite-style M0/shift fixed-point requant scheme: real_multiplier == M0 *
+2^-shift exactly, NO extra 2^-31 -- see that file's docstring and
+fpga_cnn_pipeline/docs/review_findings.md B1) rather than re-deriving them.
+>>>>>>> 99b8fe1 (get a working cnn in fpga)
 
 Usage:
     pip install onnx numpy
@@ -40,7 +48,11 @@ import numpy as np
 import onnx
 from onnx import numpy_helper
 
+<<<<<<< HEAD
 sys.path.insert(0, os.path.dirname(__file__))
+=======
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "fpga_cnn_pipeline"))
+>>>>>>> 99b8fe1 (get a working cnn in fpga)
 from onnx_to_rtl import find_conv_chain, quantize_multiplier, weight_bits  # noqa: E402
 
 

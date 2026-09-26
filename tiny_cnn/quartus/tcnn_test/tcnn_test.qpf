@@ -1,0 +1,7 @@
+QUARTUS_VERSION = "25.1"
+DATE = "27/09/2026 00:00:00"
+
+# Standalone Quartus project for the layer-pipelined Tiny-CNN accelerator
+# test system, per tiny_cnn/docs/implementation_plan.md. Does not touch
+# fpga_cnn_pipeline/quartus/cnn_test or hardware/Quartus/top.qpf.
+PROJECT_REVISION = "tcnn_test"
