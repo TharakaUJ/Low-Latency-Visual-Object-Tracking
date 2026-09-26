@@ -18,3 +18,20 @@ hardware/firmware/bsp/*
 
 *.pyc
 **/__pycache__/
+
+# fpga_cnn_pipeline build outputs
+fpga_cnn_pipeline/firmware/app/CMakeCache.txt
+fpga_cnn_pipeline/firmware/app/CMakeFiles/
+fpga_cnn_pipeline/firmware/app/Makefile
+fpga_cnn_pipeline/firmware/app/app.elf
+fpga_cnn_pipeline/firmware/app/app.elf.objdump
+fpga_cnn_pipeline/firmware/app/cmake_install.cmake
+fpga_cnn_pipeline/firmware/app/onchip_memory2_0.hex
+fpga_cnn_pipeline/firmware/app/bsp/CMakeFiles/
+fpga_cnn_pipeline/firmware/app/bsp/Makefile
+fpga_cnn_pipeline/firmware/app/bsp/cmake_install.cmake
+fpga_cnn_pipeline/firmware/app/bsp/libhal2_bsp.a
+
+fpga_cnn_pipeline/quartus/cnn_test/db/
+fpga_cnn_pipeline/quartus/cnn_test/incremental_db/
+fpga_cnn_pipeline/quartus/cnn_test/output_files/
