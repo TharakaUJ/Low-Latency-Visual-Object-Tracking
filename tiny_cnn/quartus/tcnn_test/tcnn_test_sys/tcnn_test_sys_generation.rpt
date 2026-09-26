@@ -1,0 +1,79 @@
+Info: Starting: Create HDL design files for synthesis
+Info: qsys-generate /home/tharaka/Documents/Low-Latency-Visual-Object-Tracking/tiny_cnn/quartus/tcnn_test/tcnn_test_sys.qsys --synthesis=VERILOG --output-directory=/home/tharaka/Documents/Low-Latency-Visual-Object-Tracking/tiny_cnn/quartus/tcnn_test/tcnn_test_sys/synthesis --family="Cyclone IV E" --part=EP4CE115F29C7
+Progress: Loading tcnn_test/tcnn_test_sys.qsys
+Progress: Reading input file
+Progress: Adding clk_0 [clock_source 25.1]
+Progress: Parameterizing module clk_0
+Progress: Adding intel_niosv_m_0 [intel_niosv_m 26.0.0]
+Progress: Parameterizing module intel_niosv_m_0
+Progress: Adding jtag_uart_0 [altera_avalon_jtag_uart 25.1]
+Progress: Parameterizing module jtag_uart_0
+Progress: Adding onchip_memory2_0 [altera_avalon_onchip_memory2 25.1]
+Progress: Parameterizing module onchip_memory2_0
+Progress: Adding sysid_0 [altera_avalon_sysid_qsys 25.1]
+Progress: Parameterizing module sysid_0
+Progress: Adding tcnn_avalon_slave_0 [tcnn_avalon_slave 1.0]
+Progress: Parameterizing module tcnn_avalon_slave_0
+Progress: Building connections
+Progress: Parameterizing connections
+Progress: Validating
+Progress: Done reading input file
+Warning: tcnn_test_sys.intel_niosv_m_0: Properties (associatedClock) have been set on interface reset - in composed mode these are ignored
+Warning: tcnn_test_sys.intel_niosv_m_0: Properties (associatedClock,associatedReset) have been set on interface instruction_manager - in composed mode these are ignored
+Warning: tcnn_test_sys.intel_niosv_m_0: Properties (associatedClock,associatedReset) have been set on interface data_manager - in composed mode these are ignored
+Info: tcnn_test_sys.jtag_uart_0: JTAG UART IP input clock need to be at least double (2x) the operating frequency of JTAG TCK on board
+Info: tcnn_test_sys.sysid_0: System ID is not assigned automatically. Edit the System ID parameter to provide a unique ID
+Info: tcnn_test_sys.sysid_0: Time stamp will be automatically updated when this component is generated.
+Info: tcnn_test_sys: Generating "tcnn_test_sys" for QUARTUS_SYNTH
+Info: intel_niosv_m_0: "tcnn_test_sys" instantiated intel_niosv_m "intel_niosv_m_0"
+Info: jtag_uart_0: "tcnn_test_sys" instantiated altera_avalon_jtag_uart "jtag_uart_0"
+Info: onchip_memory2_0: Starting RTL generation for module 'tcnn_test_sys_onchip_memory2_0'
+Info: onchip_memory2_0:   Generation command is [exec /home/tharaka/src/Quartus/Installation/quartus/linux64/perl/bin/perl -I /home/tharaka/src/Quartus/Installation/quartus/linux64/perl/lib -I /home/tharaka/src/Quartus/Installation/quartus/sopc_builder/bin/europa -I /home/tharaka/src/Quartus/Installation/quartus/sopc_builder/bin -I /home/tharaka/src/Quartus/Installation/quartus/../ip/altera/sopc_builder_ip/common -I /home/tharaka/src/Quartus/Installation/quartus/../ip/altera/sopc_builder_ip/altera_avalon_onchip_memory2 -- /home/tharaka/src/Quartus/Installation/quartus/../ip/altera/sopc_builder_ip/altera_avalon_onchip_memory2/generate_rtl.pl --name=tcnn_test_sys_onchip_memory2_0 --dir=/tmp/alt0722_1236771454006404839.dir/0003_onchip_memory2_0_gen/ --quartus_dir=/home/tharaka/src/Quartus/Installation/quartus --verilog --config=/tmp/alt0722_1236771454006404839.dir/0003_onchip_memory2_0_gen//tcnn_test_sys_onchip_memory2_0_component_configuration.pl  --do_build_sim=0  ]
+Info: onchip_memory2_0: Done RTL generation for module 'tcnn_test_sys_onchip_memory2_0'
+Info: onchip_memory2_0: "tcnn_test_sys" instantiated altera_avalon_onchip_memory2 "onchip_memory2_0"
+Info: sysid_0: "tcnn_test_sys" instantiated altera_avalon_sysid_qsys "sysid_0"
+Info: tcnn_avalon_slave_0: "tcnn_test_sys" instantiated tcnn_avalon_slave "tcnn_avalon_slave_0"
+Info: avalon_st_adapter: Inserting error_adapter: error_adapter_0
+Info: avalon_st_adapter_001: Inserting error_adapter: error_adapter_0
+Info: avalon_st_adapter_002: Inserting error_adapter: error_adapter_0
+Info: avalon_st_adapter_003: Inserting error_adapter: error_adapter_0
+Info: avalon_st_adapter_004: Inserting error_adapter: error_adapter_0
+Info: avalon_st_adapter_005: Inserting error_adapter: error_adapter_0
+Info: mm_interconnect_0: "tcnn_test_sys" instantiated altera_mm_interconnect "mm_interconnect_0"
+Info: irq_mapper: "tcnn_test_sys" instantiated altera_irq_mapper "irq_mapper"
+Info: rst_controller: "tcnn_test_sys" instantiated altera_reset_controller "rst_controller"
+Info: niosv_reset_controller: "Generating: niosv_reset_controller"
+Info: hart: "intel_niosv_m_0" instantiated intel_niosv_m_unit "hart"
+Info: timer_module: "intel_niosv_m_0" instantiated intel_niosv_timer_msip "timer_module"
+Info: dbg_mod: "intel_niosv_m_0" instantiated intel_niosv_dbg_mod "dbg_mod"
+Info: Reusing file /home/tharaka/Documents/Low-Latency-Visual-Object-Tracking/tiny_cnn/quartus/tcnn_test/tcnn_test_sys/synthesis/submodules/niosv_ram.sv
+Info: irq_mapper: "intel_niosv_m_0" instantiated altera_irq_mapper "irq_mapper"
+Info: intel_niosv_m_0_data_manager_translator: "mm_interconnect_0" instantiated altera_merlin_master_translator "intel_niosv_m_0_data_manager_translator"
+Info: jtag_uart_0_avalon_jtag_slave_translator: "mm_interconnect_0" instantiated altera_merlin_slave_translator "jtag_uart_0_avalon_jtag_slave_translator"
+Info: intel_niosv_m_0_data_manager_agent: "mm_interconnect_0" instantiated altera_merlin_master_agent "intel_niosv_m_0_data_manager_agent"
+Info: jtag_uart_0_avalon_jtag_slave_agent: "mm_interconnect_0" instantiated altera_merlin_slave_agent "jtag_uart_0_avalon_jtag_slave_agent"
+Info: jtag_uart_0_avalon_jtag_slave_agent_rsp_fifo: "mm_interconnect_0" instantiated altera_avalon_sc_fifo "jtag_uart_0_avalon_jtag_slave_agent_rsp_fifo"
+Info: router: "mm_interconnect_0" instantiated altera_merlin_router "router"
+Info: router_001: "mm_interconnect_0" instantiated altera_merlin_router "router_001"
+Info: router_002: "mm_interconnect_0" instantiated altera_merlin_router "router_002"
+Info: router_005: "mm_interconnect_0" instantiated altera_merlin_router "router_005"
+Info: intel_niosv_m_0_data_manager_limiter: "mm_interconnect_0" instantiated altera_merlin_traffic_limiter "intel_niosv_m_0_data_manager_limiter"
+Info: Reusing file /home/tharaka/Documents/Low-Latency-Visual-Object-Tracking/tiny_cnn/quartus/tcnn_test/tcnn_test_sys/synthesis/submodules/altera_avalon_sc_fifo.v
+Info: Reusing file /home/tharaka/Documents/Low-Latency-Visual-Object-Tracking/tiny_cnn/quartus/tcnn_test/tcnn_test_sys/synthesis/submodules/altera_avalon_st_pipeline_base.v
+Info: cmd_demux: "mm_interconnect_0" instantiated altera_merlin_demultiplexer "cmd_demux"
+Info: cmd_demux_001: "mm_interconnect_0" instantiated altera_merlin_demultiplexer "cmd_demux_001"
+Info: cmd_mux: "mm_interconnect_0" instantiated altera_merlin_multiplexer "cmd_mux"
+Info: cmd_mux_003: "mm_interconnect_0" instantiated altera_merlin_multiplexer "cmd_mux_003"
+Info: Reusing file /home/tharaka/Documents/Low-Latency-Visual-Object-Tracking/tiny_cnn/quartus/tcnn_test/tcnn_test_sys/synthesis/submodules/altera_merlin_arbitrator.sv
+Info: rsp_demux: "mm_interconnect_0" instantiated altera_merlin_demultiplexer "rsp_demux"
+Info: rsp_demux_003: "mm_interconnect_0" instantiated altera_merlin_demultiplexer "rsp_demux_003"
+Info: rsp_mux: "mm_interconnect_0" instantiated altera_merlin_multiplexer "rsp_mux"
+Info: Reusing file /home/tharaka/Documents/Low-Latency-Visual-Object-Tracking/tiny_cnn/quartus/tcnn_test/tcnn_test_sys/synthesis/submodules/altera_merlin_arbitrator.sv
+Info: rsp_mux_001: "mm_interconnect_0" instantiated altera_merlin_multiplexer "rsp_mux_001"
+Info: Reusing file /home/tharaka/Documents/Low-Latency-Visual-Object-Tracking/tiny_cnn/quartus/tcnn_test/tcnn_test_sys/synthesis/submodules/altera_merlin_arbitrator.sv
+Info: avalon_st_adapter: "mm_interconnect_0" instantiated altera_avalon_st_adapter "avalon_st_adapter"
+Info: niosv_reset_controller: "hart" instantiated intel_niosv_m_unit "niosv_reset_controller"
+Info: error_adapter_0: "avalon_st_adapter" instantiated error_adapter "error_adapter_0"
+Info: tcnn_test_sys: Done "tcnn_test_sys" with 34 modules, 102 files
+Info: qsys-generate succeeded.
+Info: Finished: Create HDL design files for synthesis
