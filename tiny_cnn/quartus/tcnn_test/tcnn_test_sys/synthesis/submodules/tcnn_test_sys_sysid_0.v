@@ -49,7 +49,7 @@ module tcnn_test_sys_sysid_0 (
 
   wire    [ 31: 0] readdata;
   //control_slave, which is an e_avalon_slave
-  assign readdata = address ? 1790456752 : 3221225474;
+  assign readdata = address ? 1790476689 : 3221225474;
 
 endmodule
 

@@ -27,7 +27,7 @@ module tcnn_avalon_slave #(
   assign avs_waitrequest = 1'b0;
 
   localparam logic [31:0] ID_VAL      = 32'h5443_4E31;  // "TCN1"
-  localparam logic [31:0] VERSION_VAL = 32'h0000_000A;  // [7:0]: tile interval code, 1024 -> 0x0A
+  localparam logic [31:0] VERSION_VAL = 32'h0000_0009;  // [7:0]: tile interval code, log2(512) -> 0x09
 
   // ---- register file ----
   logic [31:0] scratch_reg;

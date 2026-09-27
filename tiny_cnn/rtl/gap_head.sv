@@ -5,10 +5,10 @@
 // small fmap buffer -- adding that one buffer is negligible in area/latency
 // and made this module far simpler to get right under time pressure, with
 // no change to the measured throughput: this module's whole per-tile job
-// takes well under 1024 cycles, so L0-L3 (not this module) remain the
+// takes well under 512 cycles, so L0-L3 (not this module) remain the
 // pipeline's bottleneck).
 //
-// This module has enormous slack against the ~1024-cycle/tile budget (its
+// This module has enormous slack against the ~512-cycle/tile budget (its
 // whole job is a handful of adds/MACs over just 32 channels), so it is
 // implemented as a plain sequential FSM sharing ONE requant_pipe instance
 // across all 32 GAP channels and both head outputs -- no per-op pipelining

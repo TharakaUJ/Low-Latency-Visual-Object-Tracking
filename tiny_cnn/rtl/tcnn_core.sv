@@ -51,11 +51,17 @@ module tcnn_core #(
   localparam int HEAD_SHIFT1 = 33;
   localparam int LOGIT_ZP   = 123;
 
+  // Every layer issues COUT_PAR=2 output channels per cycle, so each takes
+  // ~512 cycles/tile. N_DSP_LANES splits the 774 MAC lanes between the 532
+  // embedded 9-bit multipliers (minus 74 used by requant/frame_player) and LEs.
+
   // ---- fmap L0in (tile_feeder -> L0) ----
   logic l0in_rd_ready, l0in_rd_start;
   logic [TILE_TAG_W-1:0] l0in_rd_tag;
   logic [$clog2(16*16)-1:0] l0in_rd_addr;
   logic [3*8-1:0] l0in_rd_data;
+  logic [$clog2(16*16)-1:0] l0in_rd_addr2;
+  logic [3*8-1:0] l0in_rd_data2;
   logic l0in_rd_done;
 
   fmap_pingpong #(.WORD_W(3*8), .DEPTH(16*16), .TAG_W(TILE_TAG_W)) u_fmap_l0in (
@@ -63,7 +69,8 @@ module tcnn_core #(
       .wr_ready(l0in_wr_ready), .wr_start(l0in_wr_start), .wr_tag(l0in_wr_tag),
       .wr_en(l0in_wr_en), .wr_addr(l0in_wr_addr), .wr_data(l0in_wr_data), .wr_done(l0in_wr_done),
       .rd_ready(l0in_rd_ready), .rd_start(l0in_rd_start), .rd_tag(l0in_rd_tag),
-      .rd_addr(l0in_rd_addr), .rd_data(l0in_rd_data), .rd_done(l0in_rd_done)
+      .rd_addr(l0in_rd_addr), .rd_data(l0in_rd_data),
+      .rd_addr2(l0in_rd_addr2), .rd_data2(l0in_rd_data2), .rd_done(l0in_rd_done)
   );
 
   // ---- L0: 3->16, 16x16->8x8, stride 2, CIN_PAR=3, NPASS=1 ----
@@ -77,12 +84,14 @@ module tcnn_core #(
   conv_layer #(
       .CIN(3), .COUT(16), .IN_HW(16), .OUT_HW(8), .STRIDE(2), .PAD(1),
       .CIN_PAR(3), .NPASS(1),
+      .COUT_PAR(2), .N_DSP_LANES(54),
       .LAYER(0),
       .OUT_ZP(0), .TILE_TAG_W(TILE_TAG_W)
   ) u_l0 (
       .clk(clk), .rst_n(rst_n),
       .in_rd_ready(l0in_rd_ready), .in_rd_start(l0in_rd_start), .in_rd_tag(l0in_rd_tag),
-      .in_rd_addr(l0in_rd_addr), .in_rd_data(l0in_rd_data), .in_rd_done(l0in_rd_done),
+      .in_rd_addr(l0in_rd_addr), .in_rd_data(l0in_rd_data),
+      .in_rd_addr2(l0in_rd_addr2), .in_rd_data2(l0in_rd_data2), .in_rd_done(l0in_rd_done),
       .out_wr_ready(l1in_wr_ready), .out_wr_start(l1in_wr_start), .out_wr_tag(l1in_wr_tag),
       .out_wr_en(l1in_wr_en), .out_wr_addr(l1in_wr_addr), .out_wr_data(l1in_wr_data), .out_wr_done(l1in_wr_done)
   );
@@ -92,6 +101,8 @@ module tcnn_core #(
   logic [TILE_TAG_W-1:0] l1in_rd_tag;
   logic [$clog2(8*8)-1:0] l1in_rd_addr;
   logic [16*8-1:0] l1in_rd_data;
+  logic [$clog2(8*8)-1:0] l1in_rd_addr2;
+  logic [16*8-1:0] l1in_rd_data2;
   logic l1in_rd_done;
 
   fmap_pingpong #(.WORD_W(16*8), .DEPTH(8*8), .TAG_W(TILE_TAG_W)) u_fmap_l1in (
@@ -99,7 +110,8 @@ module tcnn_core #(
       .wr_ready(l1in_wr_ready), .wr_start(l1in_wr_start), .wr_tag(l1in_wr_tag),
       .wr_en(l1in_wr_en), .wr_addr(l1in_wr_addr), .wr_data(l1in_wr_data), .wr_done(l1in_wr_done),
       .rd_ready(l1in_rd_ready), .rd_start(l1in_rd_start), .rd_tag(l1in_rd_tag),
-      .rd_addr(l1in_rd_addr), .rd_data(l1in_rd_data), .rd_done(l1in_rd_done)
+      .rd_addr(l1in_rd_addr), .rd_data(l1in_rd_data),
+      .rd_addr2(l1in_rd_addr2), .rd_data2(l1in_rd_data2), .rd_done(l1in_rd_done)
   );
 
   // ---- L1: 16->16, 8x8->8x8, stride 1, CIN_PAR=16, NPASS=1 ----
@@ -113,12 +125,14 @@ module tcnn_core #(
   conv_layer #(
       .CIN(16), .COUT(16), .IN_HW(8), .OUT_HW(8), .STRIDE(1), .PAD(1),
       .CIN_PAR(16), .NPASS(1),
+      .COUT_PAR(2), .N_DSP_LANES(128),
       .LAYER(1),
       .OUT_ZP(0), .TILE_TAG_W(TILE_TAG_W)
   ) u_l1 (
       .clk(clk), .rst_n(rst_n),
       .in_rd_ready(l1in_rd_ready), .in_rd_start(l1in_rd_start), .in_rd_tag(l1in_rd_tag),
-      .in_rd_addr(l1in_rd_addr), .in_rd_data(l1in_rd_data), .in_rd_done(l1in_rd_done),
+      .in_rd_addr(l1in_rd_addr), .in_rd_data(l1in_rd_data),
+      .in_rd_addr2(l1in_rd_addr2), .in_rd_data2(l1in_rd_data2), .in_rd_done(l1in_rd_done),
       .out_wr_ready(l2in_wr_ready), .out_wr_start(l2in_wr_start), .out_wr_tag(l2in_wr_tag),
       .out_wr_en(l2in_wr_en), .out_wr_addr(l2in_wr_addr), .out_wr_data(l2in_wr_data), .out_wr_done(l2in_wr_done)
   );
@@ -128,6 +142,8 @@ module tcnn_core #(
   logic [TILE_TAG_W-1:0] l2in_rd_tag;
   logic [$clog2(8*8)-1:0] l2in_rd_addr;
   logic [16*8-1:0] l2in_rd_data;
+  logic [$clog2(8*8)-1:0] l2in_rd_addr2;
+  logic [16*8-1:0] l2in_rd_data2;
   logic l2in_rd_done;
 
   fmap_pingpong #(.WORD_W(16*8), .DEPTH(8*8), .TAG_W(TILE_TAG_W)) u_fmap_l2in (
@@ -135,7 +151,8 @@ module tcnn_core #(
       .wr_ready(l2in_wr_ready), .wr_start(l2in_wr_start), .wr_tag(l2in_wr_tag),
       .wr_en(l2in_wr_en), .wr_addr(l2in_wr_addr), .wr_data(l2in_wr_data), .wr_done(l2in_wr_done),
       .rd_ready(l2in_rd_ready), .rd_start(l2in_rd_start), .rd_tag(l2in_rd_tag),
-      .rd_addr(l2in_rd_addr), .rd_data(l2in_rd_data), .rd_done(l2in_rd_done)
+      .rd_addr(l2in_rd_addr), .rd_data(l2in_rd_data),
+      .rd_addr2(l2in_rd_addr2), .rd_data2(l2in_rd_data2), .rd_done(l2in_rd_done)
   );
 
   // ---- L2: 16->32, 8x8->4x4, stride 2, CIN_PAR=8, NPASS=2 ----
@@ -149,12 +166,14 @@ module tcnn_core #(
   conv_layer #(
       .CIN(16), .COUT(32), .IN_HW(8), .OUT_HW(4), .STRIDE(2), .PAD(1),
       .CIN_PAR(8), .NPASS(2),
+      .COUT_PAR(2), .N_DSP_LANES(144),
       .LAYER(2),
       .OUT_ZP(0), .TILE_TAG_W(TILE_TAG_W)
   ) u_l2 (
       .clk(clk), .rst_n(rst_n),
       .in_rd_ready(l2in_rd_ready), .in_rd_start(l2in_rd_start), .in_rd_tag(l2in_rd_tag),
-      .in_rd_addr(l2in_rd_addr), .in_rd_data(l2in_rd_data), .in_rd_done(l2in_rd_done),
+      .in_rd_addr(l2in_rd_addr), .in_rd_data(l2in_rd_data),
+      .in_rd_addr2(l2in_rd_addr2), .in_rd_data2(l2in_rd_data2), .in_rd_done(l2in_rd_done),
       .out_wr_ready(l3in_wr_ready), .out_wr_start(l3in_wr_start), .out_wr_tag(l3in_wr_tag),
       .out_wr_en(l3in_wr_en), .out_wr_addr(l3in_wr_addr), .out_wr_data(l3in_wr_data), .out_wr_done(l3in_wr_done)
   );
@@ -164,6 +183,8 @@ module tcnn_core #(
   logic [TILE_TAG_W-1:0] l3in_rd_tag;
   logic [$clog2(4*4)-1:0] l3in_rd_addr;
   logic [32*8-1:0] l3in_rd_data;
+  logic [$clog2(4*4)-1:0] l3in_rd_addr2;
+  logic [32*8-1:0] l3in_rd_data2;
   logic l3in_rd_done;
 
   fmap_pingpong #(.WORD_W(32*8), .DEPTH(4*4), .TAG_W(TILE_TAG_W)) u_fmap_l3in (
@@ -171,7 +192,8 @@ module tcnn_core #(
       .wr_ready(l3in_wr_ready), .wr_start(l3in_wr_start), .wr_tag(l3in_wr_tag),
       .wr_en(l3in_wr_en), .wr_addr(l3in_wr_addr), .wr_data(l3in_wr_data), .wr_done(l3in_wr_done),
       .rd_ready(l3in_rd_ready), .rd_start(l3in_rd_start), .rd_tag(l3in_rd_tag),
-      .rd_addr(l3in_rd_addr), .rd_data(l3in_rd_data), .rd_done(l3in_rd_done)
+      .rd_addr(l3in_rd_addr), .rd_data(l3in_rd_data),
+      .rd_addr2(l3in_rd_addr2), .rd_data2(l3in_rd_data2), .rd_done(l3in_rd_done)
   );
 
   // ---- L3: 32->32, 4x4->4x4, stride 1, CIN_PAR=16, NPASS=2 ----
@@ -185,12 +207,14 @@ module tcnn_core #(
   conv_layer #(
       .CIN(32), .COUT(32), .IN_HW(4), .OUT_HW(4), .STRIDE(1), .PAD(1),
       .CIN_PAR(16), .NPASS(2),
+      .COUT_PAR(2), .N_DSP_LANES(128),
       .LAYER(3),
       .OUT_ZP(0), .TILE_TAG_W(TILE_TAG_W)
   ) u_l3 (
       .clk(clk), .rst_n(rst_n),
       .in_rd_ready(l3in_rd_ready), .in_rd_start(l3in_rd_start), .in_rd_tag(l3in_rd_tag),
-      .in_rd_addr(l3in_rd_addr), .in_rd_data(l3in_rd_data), .in_rd_done(l3in_rd_done),
+      .in_rd_addr(l3in_rd_addr), .in_rd_data(l3in_rd_data),
+      .in_rd_addr2(l3in_rd_addr2), .in_rd_data2(l3in_rd_data2), .in_rd_done(l3in_rd_done),
       .out_wr_ready(l3out_wr_ready), .out_wr_start(l3out_wr_start), .out_wr_tag(l3out_wr_tag),
       .out_wr_en(l3out_wr_en), .out_wr_addr(l3out_wr_addr), .out_wr_data(l3out_wr_data), .out_wr_done(l3out_wr_done)
   );
@@ -207,7 +231,8 @@ module tcnn_core #(
       .wr_ready(l3out_wr_ready), .wr_start(l3out_wr_start), .wr_tag(l3out_wr_tag),
       .wr_en(l3out_wr_en), .wr_addr(l3out_wr_addr), .wr_data(l3out_wr_data), .wr_done(l3out_wr_done),
       .rd_ready(l3out_rd_ready), .rd_start(l3out_rd_start), .rd_tag(l3out_rd_tag),
-      .rd_addr(l3out_rd_addr), .rd_data(l3out_rd_data), .rd_done(l3out_rd_done)
+      .rd_addr(l3out_rd_addr), .rd_data(l3out_rd_data),
+      .rd_addr2('0), .rd_data2(), .rd_done(l3out_rd_done)
   );
 
   gap_head #(

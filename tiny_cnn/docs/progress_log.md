@@ -564,3 +564,132 @@ restart/re-run paths explicitly, not just fresh-reset paths.
 Not done (out of this plan's scope, per its own "Later" section): reducing
 `CIN_PAR` to bring LE usage under the 60% target, and the 512/256-cycle
 faster-interval follow-on.
+
+## 2026-09-27 — Optimization pass: 1037 -> 524 cycles/tile (`COUT_PAR=2`)
+
+Goal: raise fps within the DE2-115's resource budget, following up on the
+"faster intervals (512/256 cycles/tile)" item this plan's "Later" section
+had left open. Feasibility was checked with a fresh Quartus per-entity
+resource report before committing to any RTL change.
+
+**Step 0 (measure):** `quartus_map`'s "Resource Utilization by Entity"
+table on the as-built 88%-LE design showed the 4 `conv_layer` instances
+using ~42k ALUTs total -- but `result_sink` alone used ~24k ALUTs and ~33k
+registers, more than the entire CNN datapath. Its frame-mismatch check
+(`if (result_ram[addr] !== word) ...`, `result_sink.sv`) computed the
+compare combinationally against a `logic [15:0] result_ram [2048]` array
+read in the same `always_ff` that also wrote it -- Quartus does not
+recognize that pattern as a synchronous RAM read, so it built the RAM as
+~33k flip-flops plus a 2048:1 combinational read mux instead of an M9K
+block. Rewrote the read as a plain registered `always_ff` port with 1
+cycle of latency (both the mismatch-compare and the Avalon read-back port
+now see `result_ram[addr]` one cycle after `res_valid`/`res_rd_addr`); a
+standalone Verilator testbench (`tb_sink_neg`, ad hoc, not checked in)
+forced one bad tile into frame 2 of 3 and confirmed `res_mismatch` still
+increments exactly once and stale reads are still caught, before touching
+the real testbenches.
+
+**Step 1 (reclaim area, no fps change):** `adder_tree.sv`'s per-level sum
+width now grows by 1 bit per level (capped at a caller-supplied `W_OUT`)
+instead of carrying a fixed 24-bit value through the whole tree from the
+leaves up, since a 144-lane product sum only needs ~21 bits. In
+`conv_layer.sv`, each product-register lane got its own `(* multstyle =
+"dsp" *)` or `"logic" *)` declaration (Quartus reads the attribute off the
+multiply's destination register, not the multiply expression itself),
+controlled by a new `N_DSP_LANES` parameter, moving most of the previously
+LE-only MAC lanes onto the chip's 532 embedded 9-bit multipliers (only
+42 were in use before). Together with the `result_sink` fix, this dropped
+LE usage from 88% to **32%**, with **no change to cycles/tile or any
+testbench's PASS output** -- confirmed bit-exact on the full existing
+regression (`tb_adder_tree`, `tb_conv_layer` x4, `tb_core`, `tb_top`,
+`tb_top` at 640x480, `tb_slave`) before proceeding, plus a Quartus
+recompile: LE 32%, multipliers 80% (425/532), Slow 85C setup slack
+**+3.658 ns** (up from +2.042 ns -- narrower adder trees and dedicated
+multiplier hardware both shortened combinational paths).
+
+**Step 2 (COUT_PAR=2 in every layer):** `conv_layer.sv` gained a
+`COUT_PAR` parameter; internally it now instantiates `COUT_PAR` parallel
+sub-lanes (`generate for (gs = 0; gs < COUT_PAR; gs++)`), each with its own
+weight/bias/mult/shift ROM read port, product array, adder tree,
+per-channel accumulator bank, and `requant_pipe`, all sharing the same
+gathered activation window (`win_cur`/`opA_r`) and issue-cycle counter.
+`OPS_PER_PIX` is now `(COUT/COUT_PAR)*NPASS`, roughly halving cycles/tile
+for `COUT_PAR=2`. The output collector waits for all `COUT_PAR` sub-lanes'
+requant results for a given (pixel, group) before assembling the fmap
+word. `tcnn_core.sv` sets `COUT_PAR=2` on all 4 layer instances (kept equal
+across layers, same reasoning as the original `CIN_PAR`/`NPASS` balancing:
+no single layer should become the bottleneck) with per-layer `N_DSP_LANES`
+sized to fit the chip's remaining multiplier headroom.
+
+**Gather rate had to double too.** With `COUT_PAR=2`, L0/L1's per-pixel
+issue budget dropped to 8 cycles (16 channels / 2), less than the original
+10-cycle serial (1 tap/cycle) 3x3 window gather. `fmap_pingpong.sv` gained
+a second read port: each bank is now written to two identical memories
+(`mem0`/`mem0b`, `mem1`/`mem1b`) on every producer write, and a second
+`rd_addr2`/`rd_data2` port reads the mirrored copy -- costs extra M9K, not
+an extra write port. `conv_layer.sv`'s gather FSM now presents 2 tap
+addresses per cycle (`tap_addr()` called for `2*gphase` and `2*gphase+1`),
+cutting the gather to `GATHER_LAST=5` address cycles + 1-cycle read
+latency = 6 cycles, still inside the 8-cycle budget. A `synthesis
+translate_off`-guarded assertion (`$error` if the next pixel's window is
+still `gathering` when the issuer needs it) backs this up in simulation.
+Also added a `$fatal`-based elaboration check that `COUT % COUT_PAR == 0`
+and that the per-pixel budget is long enough for the gather, both
+`synthesis translate_off`-guarded so Quartus never sees them.
+
+Bit-exact regression at `COUT_PAR=2` (Verilator): `tb_conv_layer` all 4
+layers PASS at 520-522 cycles/tile; `tb_core` 1000/1000 tiles PASS,
+min_gap=max_gap=524; `tb_top` and `tb_slave` PASS 12/12 rows, 0 mismatches;
+`tb_top` at 640x480 x2 frames PASS 1200/1200 rows, 0 mismatches, cycles =
+1,269,986 (matches 50e6/524/1200-tiles-per-frame arithmetic).
+
+**First Quartus compile failed timing**: Slow 85C setup slack -4.302 ns,
+Fmax 41.15 MHz (LE 51%, multipliers 95% -- fits fine, only timing failed).
+`report_timing`'s worst paths all ran from `conv_layer:u_lN|gphase[*]`
+into `win_next[...]`: the new 2-taps-per-cycle gather computed each tap's
+padding/range check and destination index (`tap_addr()`, plus the loop
+that decided which `win_next[cap_tap]` entries to write) combinationally,
+in the same cycle it captured `in_rd_data`/`in_rd_data2` into `win_next`.
+Fixed by registering that address/range arithmetic one cycle earlier
+(`cap_in0_r`/`cap_in1_r`/`cap_tap0_r`, latched off `ta0`/`ta1`/`gphase` the
+cycle before they're needed), so the capture cycle only does a small mux
+into `win_next` -- one extra cycle of one-time-per-tile gather latency,
+fully absorbed by the existing gather/issue overlap (confirmed: cycles/tile
+unchanged at 520-522 after the fix, same full regression re-run clean).
+Recompiled: **LE 50%, multipliers 95% (504/532), Slow 85C setup slack
++4.621 ns, hold +0.289 ns, Fmax 65.02 MHz** -- more margin than the
+original 40 fps build had, despite issuing twice the work per cycle.
+
+Bumped `tcnn_avalon_slave.sv`'s `VERSION` register (`0x0000000A ->
+0x00000009`, encoding `log2(cycles/tile)`) so `id` distinguishes which
+bitstream is on the board; updated `tb_slave.sv`'s matching check.
+
+**Board bring-up (Gate P4, gen 2):** rebuilt firmware
+(`niosv-bsp`/cmake/make, unchanged from the original bring-up steps),
+reprogrammed with `quartus_pgm`, redownloaded with `niosv-download`.
+`ping`/`id` confirmed the link and `VERSION=0x00000009`. Then:
+
+```
+bench: 640x480, 200 frames, cycles=125772386 fps=79.51 tiles/s=95410
+tiles_done=240000 (expect 240000) res_mismatch=0
+min_gap=524 max_gap=524 feed_stall=64298024 status=0x00000002 wall=2.73s
+```
+
+**79.51 fps, bit-exact, 0 mismatches across 200 real-hardware frames** --
+almost exactly double the first-generation board result (40.18 fps), and
+the steady-state gap (524 cycles/tile) matches the RTL simulation exactly.
+Also ran `tcnn_link.py check` (uploads a strip, runs 1 frame, compares
+every one of the 1200 tile results against `ref/int_model.py` run on the
+same replayed frame -- independent of `result_sink`'s own cross-frame
+self-check): `check: 1200 tiles, 0 mismatches, res_mismatch=0`.
+
+No change to `gen_tcnn.py`, the packed weight-ROM format, or
+`ref/int_model.py` -- each `COUT_PAR` sub-lane loads its own copy of the
+same per-layer weight ROM file and selects its output-channel group via a
+`CO_BASE` offset, so nothing on the model/generation side needed touching.
+
+Not done this pass: raising the clock past 50 MHz (Fmax now 65.02 MHz,
+so a PLL at e.g. 60 MHz could plausibly reach ~94 fps -- not attempted),
+and `COUT_PAR=4` (would need ~1550 MAC lanes, beyond the board's 532
+embedded multipliers, and the single-pixel-per-cycle raster ingest path
+caps frame throughput near ~162 fps regardless of compute speed).

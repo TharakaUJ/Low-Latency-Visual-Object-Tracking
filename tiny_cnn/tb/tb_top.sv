@@ -116,6 +116,7 @@ module tb_top #(
         automatic int addr = exp_band[i]*PITCH + exp_tcol[i];
         automatic logic [15:0] got;
         res_rd_addr = addr[15:0];
+        @(posedge clk);   // result_sink's read-back port is registered
         @(posedge clk);
         got = res_rd_data;
         if (got[7:0] !== exp_l0[i] || got[15:8] !== exp_l1[i]) begin

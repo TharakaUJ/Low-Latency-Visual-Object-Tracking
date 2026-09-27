@@ -14,6 +14,7 @@ module tb_conv_layer #(
     parameter int STRIDE  = 2,
     parameter int CIN_PAR = 3,
     parameter int NPASS   = 1,
+    parameter int COUT_PAR = 1,
     parameter int NTILES  = 8
 );
   localparam int NPIX_IN  = IN_HW*IN_HW;
@@ -28,6 +29,8 @@ module tb_conv_layer #(
   logic [TAG_W-1:0] in_rd_tag;
   logic [$clog2(NPIX_IN)-1:0] in_rd_addr;
   logic [CIN*8-1:0] in_rd_data;
+  logic [$clog2(NPIX_IN)-1:0] in_rd_addr2;
+  logic [CIN*8-1:0] in_rd_data2;
   logic          in_rd_done;
 
   logic          out_wr_ready;
@@ -40,12 +43,13 @@ module tb_conv_layer #(
 
   conv_layer #(
       .CIN(CIN), .COUT(COUT), .IN_HW(IN_HW), .OUT_HW(OUT_HW), .STRIDE(STRIDE), .PAD(1),
-      .CIN_PAR(CIN_PAR), .NPASS(NPASS), .LAYER(LAYER),
+      .CIN_PAR(CIN_PAR), .NPASS(NPASS), .COUT_PAR(COUT_PAR), .LAYER(LAYER),
       .OUT_ZP(0), .TILE_TAG_W(TAG_W)
   ) dut (
       .clk(clk), .rst_n(rst_n),
       .in_rd_ready(in_rd_ready), .in_rd_start(in_rd_start), .in_rd_tag(in_rd_tag),
-      .in_rd_addr(in_rd_addr), .in_rd_data(in_rd_data), .in_rd_done(in_rd_done),
+      .in_rd_addr(in_rd_addr), .in_rd_data(in_rd_data),
+      .in_rd_addr2(in_rd_addr2), .in_rd_data2(in_rd_data2), .in_rd_done(in_rd_done),
       .out_wr_ready(out_wr_ready), .out_wr_start(out_wr_start), .out_wr_tag(out_wr_tag),
       .out_wr_en(out_wr_en), .out_wr_addr(out_wr_addr), .out_wr_data(out_wr_data),
       .out_wr_done(out_wr_done)
@@ -76,10 +80,12 @@ module tb_conv_layer #(
   end
   assign in_rd_tag = tiles_fed[TAG_W-1:0];
 
-  // matches fmap_pingpong's real read port: 1-cycle synchronous latency
+  // matches fmap_pingpong's real read ports: 1-cycle synchronous latency
   always_ff @(posedge clk) begin
-    for (int ci = 0; ci < CIN; ci++)
-      in_rd_data[ci*8 +: 8] <= in_mem[in_rd_addr][ci];
+    for (int ci = 0; ci < CIN; ci++) begin
+      in_rd_data[ci*8 +: 8]  <= in_mem[in_rd_addr][ci];
+      in_rd_data2[ci*8 +: 8] <= in_mem[in_rd_addr2][ci];
+    end
   end
 
   assign out_wr_ready = 1'b1;

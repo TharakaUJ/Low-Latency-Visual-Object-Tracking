@@ -50,7 +50,31 @@ module result_sink #(
   logic [3:0]  warm_ctr;
   logic [31:0] last_res_cyc;
 
-  assign res_rd_data = result_ram[res_rd_addr];
+  // Both reads are synchronous so the RAM maps to M9K (two copies, one per
+  // read port). With asynchronous reads Quartus built a second 2048x16 copy
+  // out of ~33k registers plus a 2048:1 read mux (~24k ALUTs). The
+  // read-back port therefore has 1 cycle of latency, and the frame>0
+  // compare is resolved one cycle after the result arrives.
+  logic [$clog2(RAM_DEPTH)-1:0] wr_addr;
+  logic [15:0] wr_word;
+  logic        wr_en, cmp_v, cmp_v_r;
+  logic [15:0] cmp_word_r, cmp_q;
+
+  always_comb begin
+    automatic logic [15:0] band = res_tag[TILE_TAG_W-1:$clog2(PITCH)];
+    automatic logic [15:0] tcol = {{(16-$clog2(PITCH)){1'b0}}, res_tag[$clog2(PITCH)-1:0]};
+    wr_addr = $clog2(RAM_DEPTH)'(band*PITCH + tcol);
+    wr_word = {res_logit1, res_logit0};
+    wr_en   = res_valid && (frame_ctr == 0);
+    cmp_v   = res_valid && (frame_ctr != 0);
+  end
+
+  always_ff @(posedge clk) begin
+    if (wr_en) result_ram[wr_addr] <= wr_word;
+    cmp_q       <= result_ram[wr_addr];
+    res_rd_data <= result_ram[res_rd_addr[$clog2(RAM_DEPTH)-1:0]];
+    cmp_word_r  <= wr_word;
+  end
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
@@ -59,23 +83,23 @@ module result_sink #(
       run_done <= 1'b0;
       tiles_in_frame_ctr <= '0; frame_ctr <= '0; cyc_ctr <= '0;
       warm_ctr <= '0;
+      cmp_v_r <= 1'b0;
     end else begin
       run_done <= 1'b0;
       cyc_ctr <= cyc_ctr + 1'b1;
+
+      cmp_v_r <= cmp_v;
+      if (cmp_v_r && cmp_q !== cmp_word_r) res_mismatch <= res_mismatch + 1'b1;
 
       if (run_start) begin
         cycles <= '0; tiles_done <= '0; res_mismatch <= '0;
         min_gap <= 32'hFFFFFFFF; max_gap <= '0;
         tiles_in_frame_ctr <= '0; frame_ctr <= '0; cyc_ctr <= '0;
         warm_ctr <= '0;
+        cmp_v_r <= 1'b0;
       end
 
       if (res_valid) begin
-        automatic logic [15:0] band = res_tag[TILE_TAG_W-1:$clog2(PITCH)];
-        automatic logic [15:0] tcol = {{(16-$clog2(PITCH)){1'b0}}, res_tag[$clog2(PITCH)-1:0]};
-        automatic int addr = band*PITCH + tcol;
-        automatic logic [15:0] word = {res_logit1, res_logit0};
-
         tiles_done <= tiles_done + 1'b1;
         cycles     <= cyc_ctr;
 
@@ -86,12 +110,6 @@ module result_sink #(
           if (gap > max_gap) max_gap <= gap;
         end
         last_res_cyc <= cyc_ctr;
-
-        if (frame_ctr == 0) begin
-          result_ram[addr] <= word;
-        end else begin
-          if (result_ram[addr] !== word) res_mismatch <= res_mismatch + 1'b1;
-        end
 
         if (tiles_in_frame_ctr == tiles_per_frame-1) begin
           tiles_in_frame_ctr <= '0;

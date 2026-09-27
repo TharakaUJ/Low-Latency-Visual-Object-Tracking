@@ -43,6 +43,8 @@ module fmap_pingpong #(
     output logic [TAG_W-1:0]      rd_tag,
     input  logic [$clog2(DEPTH)-1:0] rd_addr,
     output logic [WORD_W-1:0]     rd_data,
+    input  logic [$clog2(DEPTH)-1:0] rd_addr2,   // second read port, same bank and latency
+    output logic [WORD_W-1:0]     rd_data2,
     input  logic                  rd_done
 );
   localparam int AW = $clog2(DEPTH);
@@ -53,9 +55,13 @@ module fmap_pingpong #(
   logic             wr_ptr;   // which bank the producer is/will target
   logic             rd_ptr;   // which bank the consumer is/will target
 
-  // two independent simple-dual-port memories (one write port, one read port)
+  // two independent simple-dual-port memories (one write port, one read
+  // port) per bank; the *b copies are written identically and serve the
+  // second read port, since an M9K has only one read port in this mode.
   logic [WORD_W-1:0] mem0 [DEPTH];
   logic [WORD_W-1:0] mem1 [DEPTH];
+  logic [WORD_W-1:0] mem0b [DEPTH];
+  logic [WORD_W-1:0] mem1b [DEPTH];
 
   assign wr_ready = (st[wr_ptr] == FREE);
   assign rd_ready = (st[rd_ptr] == FULL);
@@ -64,8 +70,8 @@ module fmap_pingpong #(
   // write port (bank selected by wr_ptr)
   always_ff @(posedge clk) begin
     if (wr_en) begin
-      if (wr_ptr == 1'b0) mem0[wr_addr] <= wr_data;
-      else                 mem1[wr_addr] <= wr_data;
+      if (wr_ptr == 1'b0) begin mem0[wr_addr] <= wr_data; mem0b[wr_addr] <= wr_data; end
+      else                begin mem1[wr_addr] <= wr_data; mem1b[wr_addr] <= wr_data; end
     end
   end
 
@@ -83,6 +89,11 @@ module fmap_pingpong #(
   always_ff @(posedge clk) mem0_q <= mem0[rd_addr];
   always_ff @(posedge clk) mem1_q <= mem1[rd_addr];
   assign rd_data = (rd_ptr == 1'b0) ? mem0_q : mem1_q;
+
+  logic [WORD_W-1:0] mem0b_q, mem1b_q;
+  always_ff @(posedge clk) mem0b_q <= mem0b[rd_addr2];
+  always_ff @(posedge clk) mem1b_q <= mem1b[rd_addr2];
+  assign rd_data2 = (rd_ptr == 1'b0) ? mem0b_q : mem1b_q;
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin

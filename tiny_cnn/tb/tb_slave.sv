@@ -54,7 +54,7 @@ module tb_slave;
     avs_rd(5'd0, rd_val);
     expect_eq(rd_val, 32'h5443_4E31, "ID");
     avs_rd(5'd1, rd_val);
-    expect_eq(rd_val[7:0], 8'h0A, "VERSION.interval_code");
+    expect_eq(rd_val[7:0], 8'h09, "VERSION.interval_code");
     for (int i = 0; i < 20; i++) begin
       logic [31:0] v;
       v = $urandom();

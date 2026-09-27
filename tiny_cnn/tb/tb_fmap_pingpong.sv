@@ -16,13 +16,15 @@ module tb_fmap_pingpong;
   logic wr_en; logic [$clog2(DEPTH)-1:0] wr_addr; logic [WORD_W-1:0] wr_data; logic wr_done;
   logic rd_ready, rd_start; logic [TAG_W-1:0] rd_tag;
   logic [$clog2(DEPTH)-1:0] rd_addr; logic [WORD_W-1:0] rd_data; logic rd_done;
+  logic [$clog2(DEPTH)-1:0] rd_addr2; logic [WORD_W-1:0] rd_data2;
 
   fmap_pingpong #(.WORD_W(WORD_W), .DEPTH(DEPTH), .TAG_W(TAG_W)) dut (
       .clk(clk), .rst_n(rst_n),
       .wr_ready(wr_ready), .wr_start(wr_start), .wr_tag(wr_tag),
       .wr_en(wr_en), .wr_addr(wr_addr), .wr_data(wr_data), .wr_done(wr_done),
       .rd_ready(rd_ready), .rd_start(rd_start), .rd_tag(rd_tag),
-      .rd_addr(rd_addr), .rd_data(rd_data), .rd_done(rd_done)
+      .rd_addr(rd_addr), .rd_data(rd_data),
+      .rd_addr2(rd_addr2), .rd_data2(rd_data2), .rd_done(rd_done)
   );
 
   int errors = 0;
@@ -57,7 +59,7 @@ module tb_fmap_pingpong;
   // consumer process
   initial begin
     logic [WORD_W-1:0] exp;
-    rd_start = 0; rd_addr = '0; rd_done = 0;
+    rd_start = 0; rd_addr = '0; rd_addr2 = '0; rd_done = 0;
     wait(rst_n);
     @(posedge clk);
     for (int t = 0; t < NTILES; t++) begin
@@ -72,11 +74,16 @@ module tb_fmap_pingpong;
       for (int a = 0; a < DEPTH; a++) begin
         if ($urandom_range(0,4)==0) @(posedge clk); // random stall before issuing addr
         rd_addr = a[$clog2(DEPTH)-1:0];
+        rd_addr2 = $clog2(DEPTH)'(DEPTH-1-a);  // second port reads the mirrored address
         @(posedge clk);
         @(posedge clk); // wait for 1-cycle read latency
         exp = a[WORD_W-1:0] + t*1000;
         if (rd_data !== exp) begin
           $display("FAIL: tile %0d addr %0d got %0d exp %0d", t, a, rd_data, exp);
+          errors++;
+        end
+        if (rd_data2 !== WORD_W'(DEPTH-1-a + t*1000)) begin
+          $display("FAIL: port2 tile %0d addr %0d got %0d", t, DEPTH-1-a, rd_data2);
           errors++;
         end
       end
