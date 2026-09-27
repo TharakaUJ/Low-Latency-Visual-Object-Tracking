@@ -50,7 +50,8 @@ axes[2].axis("off")
 fig.colorbar(im, ax=axes[2], fraction=0.046, pad=0.04)
 
 n_mismatch = info["mismatches"]
-fig.suptitle(f"FPGA (Gen 2, real DE2-115 hardware) inference on {label} -- "
+source = info.get("source_label", "FPGA (real DE2-115 hardware)")
+fig.suptitle(f"{source} inference on {label} -- "
              f"{nw*nh} tiles, {n_mismatch} mismatches vs ref/int_model.py", fontsize=12)
 fig.tight_layout(rect=[0, 0, 1, 0.92])
 fig.savefig(f"{OUT}/{out_name}.png")
