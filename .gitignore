@@ -18,3 +18,53 @@ hardware/firmware/bsp/*
 
 *.pyc
 **/__pycache__/
+
+# fpga_cnn_pipeline build outputs
+fpga_cnn_pipeline/firmware/app/CMakeCache.txt
+fpga_cnn_pipeline/firmware/app/CMakeFiles/
+fpga_cnn_pipeline/firmware/app/Makefile
+fpga_cnn_pipeline/firmware/app/app.elf
+fpga_cnn_pipeline/firmware/app/app.elf.objdump
+fpga_cnn_pipeline/firmware/app/cmake_install.cmake
+fpga_cnn_pipeline/firmware/app/onchip_memory2_0.hex
+fpga_cnn_pipeline/firmware/app/bsp/CMakeFiles/
+fpga_cnn_pipeline/firmware/app/bsp/Makefile
+fpga_cnn_pipeline/firmware/app/bsp/cmake_install.cmake
+fpga_cnn_pipeline/firmware/app/bsp/libhal2_bsp.a
+
+fpga_cnn_pipeline/quartus/cnn_test/db/
+fpga_cnn_pipeline/quartus/cnn_test/incremental_db/
+fpga_cnn_pipeline/quartus/cnn_test/output_files/
+
+# tiny_cnn -- Verilator build directories (one per testbench)
+tiny_cnn/obj_*/
+
+# tiny_cnn -- Quartus/Platform Designer build outputs (cnn_test_sys/ itself
+# is tracked, matching fpga_cnn_pipeline/quartus/cnn_test/'s convention --
+# it's the qsys-generated RTL Platform Designer snapshots, needed to
+# rebuild without a full qsys-generate re-run)
+tiny_cnn/quartus/tcnn_test/db/
+tiny_cnn/quartus/tcnn_test/incremental_db/
+tiny_cnn/quartus/tcnn_test/output_files/
+tiny_cnn/quartus/tcnn_test/simulation/
+tiny_cnn/quartus/tcnn_test/*.log
+tiny_cnn/quartus/tcnn_test/*.qws
+tiny_cnn/quartus/tcnn_test/.qsys_edit
+
+# tiny_cnn -- Nios V firmware build outputs
+tiny_cnn/firmware/app/CMakeCache.txt
+tiny_cnn/firmware/app/CMakeFiles/
+tiny_cnn/firmware/app/Makefile
+tiny_cnn/firmware/app/app.elf
+tiny_cnn/firmware/app/app.elf.objdump
+tiny_cnn/firmware/app/cmake_install.cmake
+tiny_cnn/firmware/app/onchip_memory2_0.hex
+tiny_cnn/firmware/app/cmake_install.cmake
+tiny_cnn/firmware/app/bsp/CMakeFiles/
+tiny_cnn/firmware/app/bsp/Makefile
+tiny_cnn/firmware/app/bsp/cmake_install.cmake
+tiny_cnn/firmware/app/bsp/libhal2_bsp.a
+
+# tiny_cnn -- host tool
+tiny_cnn/host/__pycache__/
+tiny_cnn/host/results/

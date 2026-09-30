@@ -1,0 +1,13 @@
+tiles/frame: 1200
+
+Backend                total (s)         fps       tiles/s
+onnxruntime CPU           14.274       14.01         16814
+OpenVINO CPU               3.469       57.65         69175
+OpenVINO GPU               0.706      283.45        340140
+
+(measured over 2 back-to-back runs; batched call of all 1200 tiles/frame,
+200 frames, tinycnn_qat_int4.onnx run as float32 -- see caveats in REPORT.md)
+Run 1: onnxruntime CPU 14.67 fps, OpenVINO CPU 42.69 fps, OpenVINO GPU 218.52 fps
+Run 2: onnxruntime CPU 15.07 fps, OpenVINO CPU 55.04 fps, OpenVINO GPU 235.94 fps
+Run 3: onnxruntime CPU 14.69 fps, OpenVINO CPU 36.20 fps, OpenVINO GPU 227.01 fps
+Run 4: onnxruntime CPU 14.01 fps, OpenVINO CPU 57.65 fps, OpenVINO GPU 283.45 fps

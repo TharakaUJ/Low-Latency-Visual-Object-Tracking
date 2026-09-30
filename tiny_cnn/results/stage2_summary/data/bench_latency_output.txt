@@ -1,0 +1,13 @@
+Single-tile (batch=1) latency, 2000 iterations, tinycnn_qat_int4.onnx as float32:
+
+Run 1:
+Backend                latency/tile (us)   max tiles/s (1/lat)
+onnxruntime CPU                     74.6                 13404
+OpenVINO CPU                       211.9                  4720
+OpenVINO GPU                      1517.8                   659
+
+Run 2:
+Backend                latency/tile (us)   max tiles/s (1/lat)
+onnxruntime CPU                    117.7                  8497
+OpenVINO CPU                       219.4                  4558
+OpenVINO GPU                      1286.9                   777
