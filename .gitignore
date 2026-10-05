@@ -79,3 +79,7 @@ hardware/ethernet/*/fpga/*
 !hardware/ethernet/*/fpga/Makefile
 hardware/ethernet/results/**/frames.csv
 hardware/ethernet/results/*.log
+# hardware/ethernet -- demo videos, stress-test raw data, compiled host tools
+hardware/ethernet/results/**/*.mp4
+hardware/ethernet/results/**/*.bin
+hardware/ethernet/host/burst_send
