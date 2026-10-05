@@ -83,3 +83,9 @@ hardware/ethernet/results/*.log
 hardware/ethernet/results/**/*.mp4
 hardware/ethernet/results/**/*.bin
 hardware/ethernet/host/burst_send
+# hardware/ethernet/p3_track -- Quartus outputs per tracker, Verilator builds, sim logs
+hardware/ethernet/p3_track/fpga_*/*
+!hardware/ethernet/p3_track/fpga_*/Makefile
+!hardware/ethernet/p3_track/fpga_s3x8/s3x8.qsf
+hardware/ethernet/**/sim_build_*/
+hardware/ethernet/**/sim_*.log
