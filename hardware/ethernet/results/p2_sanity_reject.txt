@@ -1,0 +1,6 @@
+0 fpga score 17959 good False | model 17959 False
+1 fpga score 19109 good False | model 19109 False
+2 fpga score 18418 good False | model 18418 False
+3 fpga score 18501 good False | model 18501 False
+4 fpga score 18424 good False | model 18424 False
+agree 5 / 5
