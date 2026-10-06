@@ -182,3 +182,12 @@ Plan: object_tracking/presentation/demo/plan_P0_P1.md (approved 2026-10-05).
   - Restart with --cam-exposure 250 --cam-gain 48: 210/210, corrections every 17 frames applied on time, display 14.9 fps.
   - Camera alone (demo stopped), 640x480: MJPG and YUYV both 15.0 fps in manual exposure, 7.5-7.8 fps in auto. Manual exposure 5..300 changes neither the rate nor the brightness, so this camera caps itself at 15 fps in low light. The demo is not the limit (OTB runs at 29.6 fps); in a bright room it should give 30.
   - The first target box was on a dark, low-texture area (uniform template, score ~2600 standing still): use a small object with contrast.
+
+## 2026-10-07 commit + S-3x8 speed review (user: "make necessary commits ... check once again if we can achieve higher speeds with better pipelining")
+- Commit eba43bb (no co-author): P3 check, P3b speed, correction and webcam result summaries/CSVs/plots; host/speed_send (compiled) added to .gitignore. Not committed: the four results/demo_Walking_20261006_01* runs (not mine, as before).
+- Speed review (analysis only, nothing changed or built). S-3x8 core today: 72 ROI rows x 800 clk at 62.5 MHz = 57.6k clk ≈ 0.92 ms (≈ 1085/s, measured clean 1050). Where the time goes:
+  - Matcher: 49 jobs (one per feature row 15..63) x 784 clk, 128 abs-diffs/clk, no job queue (overrun if a row completes while busy). Conv layers need only 5,184 clk (1 px/clk).
+  - Pacing is uniform: ROI rows 0..21 and 71 have no matcher job but still wait 800 clk.
+  - Tracker clock Fmax 90.2 MHz (slow 85C); worst path L3 requant (pr + B + half) >> s + clamp in one clock.
+  - Area: s3x8_top 50.6k LE (L1 3.3k, L2 20.1k, L3 16.7k, matcher 10.5k); whole design 60.8k / 114k LE.
+- Options (estimates, compute only, not measured): (1) pace only rows 22..70: ~41.6k clk, ~1.4x; (2) one register in the requant -> ~100 MHz clock (needs Quartus to confirm), ~1.6x; (3) 2 candidates per clock using the second M9K read port, ~+8-9k LE: ~21.6k clk; (4) 4 per clock (duplicate feature buffer, ~+25k LE): ~11.7k clk. (1)+(2)+(3) ≈ 4600/s, above what the link/host path has delivered so far (ZSAD clean 3000/s). Faster core also shortens the result latency, which is what limits FPGA crop (500/s now). Waiting for the user's decision; would need a plan (P4).
