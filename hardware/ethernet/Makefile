@@ -34,7 +34,7 @@ FLASH_BACKUP ?= $(HOME)/fpga_flash_backup/de2_115_epcs64_factory.pof
         program-p1 program-p2 program-zsad program-s3x8 jtag \
         jic-zsad jic-s3x8 flash-backup flash-check-backup flash-zsad flash-s3x8 flash-restore \
         sim-p1 sim-p2 sim-zsad sim-s3x8 sim-all \
-        loopback faults stress-p2 offline check check-all demo demo-loop timing
+        loopback faults stress-p2 offline check check-all speed demo demo-loop timing
 
 help:
 	@echo "Build (Quartus Lite):  make build-p1 | build-p2 | build-zsad | build-s3x8 | build-all"
@@ -47,6 +47,7 @@ help:
 	@echo "  P2 bitstream:        make stress-p2"
 	@echo "  P3 bitstream:        make check TRACKER=zsad|s3x8 CROP=fpga|server SEQ=Walking FRAMES=0"
 	@echo "                       make check-all TRACKER=...   (4 demo sequences, both crop modes)"
+	@echo "                       make speed TRACKER=... CROP=...   (frame-rate sweep to line rate, every result checked)"
 	@echo "                       make demo TRACKER=... CROP=... SEQ=...   (live page http://100.76.229.14:8090/)"
 	@echo "Offline model (no board): make offline   (ZSAD over OTB-100)"
 	@echo "Variables: BOARD_IP=$(BOARD_IP) SEQ=$(SEQ) TRACKER=$(TRACKER) CROP=$(CROP) FRAMES=$(FRAMES) FPS=$(FPS)"
@@ -136,6 +137,10 @@ check:
 check-all:
 	for s in Walking Jumping BlurOwl Bolt; do for c in fpga server; do \
 	  $(MAKE) --no-print-directory check TRACKER=$(TRACKER) CROP=$$c SEQ=$$s || exit 1; done; done
+# P3 speed test: frame-rate sweep up to line rate, every tracked result checked against the model
+speed:
+	cd host && $(PY) speed3.py --ip $(BOARD_IP) --tracker $(TRACKER) --crop $(CROP) --seq $(SEQ) \
+	  --out $(RESULTS)/speed_$(TRACKER)_$(CROP)_$(SEQ)
 demo:
 	cd host && $(PY) demo.py --ip $(BOARD_IP) --tracker $(TRACKER) --crop $(CROP) --source otb --seq $(SEQ) --fps $(FPS) \
 	  --out $(RESULTS)/demo3_$(TRACKER)_$(CROP)_$(SEQ)

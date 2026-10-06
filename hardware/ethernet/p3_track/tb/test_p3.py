@@ -26,7 +26,7 @@ sys.path.insert(0, host_dir)
 from trackers import make_model, Track, pad_to   # noqa: E402
 
 TRACKER = os.environ.get("TRACKER", "zsad")
-SECTIONS = set(os.environ.get("SECTIONS", "1,2,3,4,5,6,7,8").split(","))   # run a subset while debugging
+SECTIONS = set(os.environ.get("SECTIONS", "1,2,3,4,5,6,7,8,9").split(","))   # run a subset while debugging
 BOARD_MAC, BOARD_IP = "02:00:0a:08:64:e6", "10.8.100.230"
 HOST_MAC, HOST_IP, HOST_PORT = "5a:51:52:53:54:55", "10.8.100.45", 5678
 PORT = 1234
@@ -347,6 +347,57 @@ async def run_test(dut):
         model.set_template(tr2.tmpl)
         tr.tmpl = tr2.tmpl
         await frame(scene(72, 62), "next frame uses the new template")
+
+    if '9' in SECTIONS:
+        # 9. (board speed test 2026-10-06) a frame cut in the middle of its ROI (rows 1..oy+35 lost, as when
+        # the receiver stalls at its first row), then at once a full frame: the cut frame is untracked and
+        # the full frame must still match the model (the tracker must not carry state from the cut frame)
+        img = scene(66, 56)
+        o = tr.origin(pad_to(img, R).shape)
+        g = await frame(img, "cut mid-ROI: untracked", rows=[0] + list(range(o[1] + 36, H)), expect_track=False,
+                        wait=False)
+        await frame(scene(68, 57), "full frame right after a frame cut mid-ROI")
+        await frame(scene(70, 58), "and the next one")
+
+    if '11' in SECTIONS:
+        # 11. as 9, with the cut at many points of the ROI, so sof lands at different points of a matcher job
+        for cut in range(int(os.environ.get("CUT0", "20")), 72, int(os.environ.get("CUT_STEP", "4"))):
+            img = scene(66, 56)
+            o = tr.origin(pad_to(img, R).shape)
+            await frame(img, f"cut at ROI row {cut}: untracked", rows=list(range(0, o[1] + cut)), expect_track=False,
+                        wait=False)
+            await frame(scene(68, 57), f"  full frame right after the cut at ROI row {cut}")
+
+    if '10' in SECTIONS:
+        # 10. (board speed test 2026-10-06) burst: frames back to back, faster than the tracker, as at
+        # >= 900 fps on the board. Which frames get cut depends on timing, so each tracked result is
+        # checked on its own: model at the ROI origin the FPGA reports = FPGA score and position.
+        imgs, fids = {}, []
+        for k in range(int(os.environ.get("BURST", "8"))):
+            img = scene(60 + 2 * k, 50 + k)
+            f = fid
+            fid += 1
+            imgs[f] = pad_to(img, R)
+            fids.append(f)
+            for r in range(img.shape[0]):
+                await tb.send(row_pkt(f, r, img))
+        await wait_fids(tb, fids, trk_ns * 3)
+        n_tr = 0
+        for f in fids:
+            g = next((r for r in tb.results if r["frame_id"] == f), None)
+            if g is None or not (g["flags"] & 0x8 and g["flags"] & 0x1):
+                tb.log.info("burst fid %d: %s", f, "no result" if g is None else f"flags {g['flags']:#x} rows {g['rows_seen']}")
+                continue
+            n_tr += 1
+            ox, oy = g["roi_x"], g["roi_y"]
+            bx, by, z, good = model.match(np.ascontiguousarray(imgs[f][oy:oy + R, ox:ox + R]))
+            exp_xy = (ox + bx + model.MARGIN, oy + by + model.MARGIN)
+            ok = g["score"] == z and (not good or (g["x"], g["y"]) == exp_xy)
+            check(f"burst fid {f} (roi {ox},{oy}, rows {g['rows_seen']})", ok,
+                  f"model score {z} xy {exp_xy}, FPGA score {g['score']} xy {(g['x'], g['y'])}")
+            if good and ok:
+                tr.tx, tr.ty = g["x"], g["y"]
+        check(f"burst: {n_tr}/{len(fids)} frames tracked (information)", True)
 
     for _ in range(3000):
         await RisingEdge(dut.clk)

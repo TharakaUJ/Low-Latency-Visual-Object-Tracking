@@ -11,14 +11,18 @@
 // bits 8b+7..8b). It is complete when byte 2047 is written, kept in a shadow RAM and copied into
 // s3x8_top (16 t_we writes) at the next new frame.
 // E48 needs >= 788 clocks per ROI line: rows are paced to LINE_CLKS clocks (start to start).
-// At a new frame: drain (if a frame was cut short), copy a pending template, pulse sof, stream rows.
+// At a new frame: drain, copy a pending template, pulse sof, stream rows. The drain is DRAIN_CLKS after a
+// frame that finished (done), CUT_DRAIN_CLKS after one that was cut short: then the matcher may be in the
+// middle of a candidate-row job (784 clocks) and sof does not flush its adder pipeline, so the job must end
+// first (board speed test 2026-10-06: a partial row sum leaked into the next frame's best).
 // When the ROI-th row of a frame arrived in order, wait for done and report best/best_x/best_y.
 // res_x/res_y = best candidate (0..48): window top-left at ROI (res_x + 4, res_y + 4) (MARGIN 4).
 module s3x8_core #(
     parameter int ROI        = 72,
     parameter int TMPL_BYTES = 2048,
     parameter int LINE_CLKS  = 800,
-    parameter int DRAIN_CLKS = 256
+    parameter int DRAIN_CLKS = 256,
+    parameter int CUT_DRAIN_CLKS = 1024
 )(
     input  logic        clk,
     input  logic        rst,
@@ -76,6 +80,7 @@ module s3x8_core #(
     logic [15:0] line_t;                // clocks since the current row started
     logic [15:0] wait_t;
     logic        new_row_ok;
+    logic        clean_end;             // the last frame given to s3x8_top ended with done (matcher idle)
 
     // the next row (ctrl word) may start only LINE_CLKS after the previous one
     assign new_row_ok = !frame_on || (line_t >= LINE_CLKS);
@@ -106,6 +111,7 @@ module s3x8_core #(
             rows_cnt <= '0;
             inorder <= 1'b0;
             frame_on <= 1'b0;
+            clean_end <= 1'b1;
             line_t <= '0;
             wait_t <= '0;
             res_toggle <= 1'b0;
@@ -156,7 +162,7 @@ module s3x8_core #(
             end
             ST_DRAIN: begin                                 // let the pipelines empty (frame done or cut short)
                 wait_t <= wait_t + 1'b1;
-                if (wait_t == DRAIN_CLKS) state <= sh_pending ? ST_COPY : ST_SOF;
+                if (wait_t == (clean_end ? DRAIN_CLKS : CUT_DRAIN_CLKS)) state <= sh_pending ? ST_COPY : ST_SOF;
             end
             ST_COPY: begin
                 cp <= cp + 1'b1;
@@ -177,6 +183,7 @@ module s3x8_core #(
             ST_SOF: begin                                   // restart the E48 core for the new frame
                 sof <= 1'b1;
                 frame_on <= 1'b1;
+                clean_end <= 1'b0;
                 line_t <= '0;
                 state <= ST_GAP;
             end
@@ -190,6 +197,7 @@ module s3x8_core #(
                     res_toggle <= !res_toggle;
                     frames_tracked <= frames_tracked + 1'b1;
                     frame_on <= 1'b0;
+                    clean_end <= 1'b1;
                     state <= ST_RUN;
                 end
             end
