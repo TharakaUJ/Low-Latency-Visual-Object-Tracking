@@ -9,6 +9,15 @@ Board repo: `~/Documents/Low-Latency-Visual-Object-Tracking` (branch `ethernet-d
   - Builds, all timing corners met: ZSAD 25 % LE (fitter seed 2, `p3_track/seed_2.qsf`), S-3x8 53 % LE, 60 multipliers, 13 % memory.
   - Bugs fixed on 2026-10-06: early tracker result lost with the RTL crop (now latched); S-3x8 stream shifted by one column after `sof` and by 5 columns when `sof` followed `done` (gap + drain); S-3x8 tracker FIFO 16 k words (two ROI frames); testbench waited for the wrong result.
 
+## Flash session (USB-Blaster connected, Ethernet not needed)
+Only one of USB-Blaster / Ethernet can be connected (cable length), so the design goes into the EPCS64 flash. Stop at the first failure:
+1. `make jtag`: EP4CE115 listed.
+2. `make flash-backup`: factory image -> `~/fpga_flash_backup/de2_115_epcs64_factory.pof`. **Untested:** whether `IE` writes a usable .pof. Copy it to the laptop as a second copy.
+3. `make flash-check-backup`: verify passes (flash = backup). This proves the restore file works **before** anything is written. If the .pof format is refused, fix the restore path first (e.g. examine to .jic, or convert), do not flash.
+4. `make flash-zsad` (or `flash-s3x8`), then unplug USB, plug Ethernet, power-cycle with SW19 = RUN, and continue with the board tests below from step 5 (`make check ...`; skip `program-...`).
+5. Before returning the board: `make flash-restore`, power-cycle, check the factory test pattern.
+Note: `make program-*` was broken until 2026-10-06 evening (fixed, dry-run only). Board tests 2-4 below (P1/P2 regressions) need JTAG + Ethernet together; with the flash they would need P1/P2 flashed as well (no flash target for them yet): skip or decide then.
+
 ## Board tests (plug in the board, ENET0 cable; JTAG via the USB-Blaster)
 Do these in order, and stop at the first failure:
 

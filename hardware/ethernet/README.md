@@ -26,6 +26,17 @@ make sim-zsad                     # cocotb + Verilator testbench (no board neede
   - The host scripts use the system `python3` (numpy, opencv) and read OTB-100 from the research tree (read-only).
 - **Builds:** `make` inside a project uses `SHELL=/bin/bash`: the upstream `quartus.mk` uses bash `let` and hangs under dash.
 
+## Flash: boot the demo without the USB cable
+The FPGA forgets its design at power-off. To run with only the Ethernet cable, write a P3 design to the
+board's EPCS64 flash once over the USB-Blaster; the board then loads it at every power-up (SW19 = RUN).
+1. `make flash-backup`: reads the factory image (Terasic default demo) to
+   `~/fpga_flash_backup/de2_115_epcs64_factory.pof` (+ `.sha256`). Once; it never overwrites the backup.
+2. `make flash-check-backup`: the flash still matches the backup (checks the backup can be used to restore).
+3. `make flash-zsad` or `make flash-s3x8`: writes and verifies the design (.jic). Refuses without a backup.
+4. Unplug USB, plug Ethernet, power-cycle: the board answers on 10.8.100.230 as with `make program-...`.
+5. Before returning the board: `make flash-restore` (USB again), power-cycle: the factory demo is back.
+Only one design is in the flash at a time; switching tracker = step 3 again.
+
 ## Layout
 | path | what |
 |---|---|

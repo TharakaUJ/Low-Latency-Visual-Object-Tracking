@@ -1,7 +1,7 @@
 # DE2-115 Ethernet hardware-in-the-loop tracking demo: one entry point for build, program, simulate, run.
 # Run on the server from hardware/ethernet/.  `make help` lists the targets.
 #
-# Bitstreams (all JTAG/volatile: reprogram after a power cycle):
+# Bitstreams (JTAG = volatile: reprogram after a power cycle; or write P3 to the EPCS64 flash, see "flash"):
 #   p1  = p1_rows           P1 row protocol + checksums (loopback, fault tests)       40-byte results
 #   p2  = p2_zsad           P2 ZSAD, server-side 80x80 crop (board-tested 2026-10-06) 40-byte results
 #   zsad= p3_track zsad     P3 ZSAD, crop in the RTL or server, no in-flight limit    44-byte results
@@ -24,15 +24,22 @@ SOF_p1   := p1_rows/fpga/fpga.sof
 SOF_p2   := p2_zsad/fpga/fpga.sof
 SOF_zsad := p3_track/fpga_zsad/fpga.sof
 SOF_s3x8 := p3_track/fpga_s3x8/fpga.sof
+JIC_zsad := p3_track/fpga_zsad/fpga.jic
+JIC_s3x8 := p3_track/fpga_s3x8/fpga.jic
+# factory flash image of this board (Terasic default demo), read back before our first flash write;
+# kept outside the repo and never overwritten by make
+FLASH_BACKUP ?= $(HOME)/fpga_flash_backup/de2_115_epcs64_factory.pof
 
 .PHONY: help venv-sim build-p1 build-p2 build-zsad build-s3x8 build-all \
         program-p1 program-p2 program-zsad program-s3x8 jtag \
+        jic-zsad jic-s3x8 flash-backup flash-check-backup flash-zsad flash-s3x8 flash-restore \
         sim-p1 sim-p2 sim-zsad sim-s3x8 sim-all \
         loopback faults stress-p2 offline check check-all demo demo-loop timing
 
 help:
 	@echo "Build (Quartus Lite):  make build-p1 | build-p2 | build-zsad | build-s3x8 | build-all"
 	@echo "Program over JTAG:     make program-p1 | program-p2 | program-zsad | program-s3x8   (make jtag = list cable)"
+	@echo "Flash (boots w/o USB): make flash-backup (once) | flash-check-backup | flash-zsad | flash-s3x8 | flash-restore"
 	@echo "Simulate (cocotb):     make sim-p1 (icarus) | sim-p2 | sim-zsad | sim-s3x8 (Verilator 5) | sim-all"
 	@echo "Timing summary:        make timing"
 	@echo "Board tests:"
@@ -71,9 +78,36 @@ timing:
 # ---------------------------------------------------------------- program
 jtag:
 	$(QUARTUS_BIN)/jtagconfig
-program-%:
+program-p1 program-p2 program-zsad program-s3x8: program-%:
 	@test -f "$(SOF_$*)" || (echo "no bitstream $(SOF_$*): run make build-$*"; exit 1)
 	$(QUARTUS_BIN)/quartus_pgm --no_banner --mode=jtag -o "P;$(SOF_$*)"
+
+# ---------------------------------------------------------------- flash (EPCS64)
+# The DE2-115 loads its design from the EPCS64 at power-up (SW19 = RUN), so the board can run the demo
+# with only the Ethernet cable. Written over the USB-Blaster through the Serial Flash Loader (.jic).
+# Order: flash-backup (once, keeps the factory image), flash-check-backup, flash-zsad|flash-s3x8;
+# before returning the board: flash-restore. Only one design is in the flash at a time.
+jic-zsad jic-s3x8: jic-%:
+	@test -f "$(SOF_$*)" || (echo "no bitstream $(SOF_$*): run make build-$*"; exit 1)
+	$(QUARTUS_BIN)/quartus_cpf -c -d EPCS64 -s EP4CE115 $(SOF_$*) $(JIC_$*)
+flash-backup:
+	@test ! -e "$(FLASH_BACKUP)" || (echo "$(FLASH_BACKUP) exists: not overwriting the factory backup"; exit 1)
+	mkdir -p $(dir $(FLASH_BACKUP))
+	$(QUARTUS_BIN)/quartus_pgm --no_banner --mode=jtag -o "IE;$(FLASH_BACKUP);EPCS64@1"
+	sha256sum $(FLASH_BACKUP) > $(FLASH_BACKUP).sha256
+flash-check-backup:
+	@test -f "$(FLASH_BACKUP)" || (echo "no factory backup: run make flash-backup first"; exit 1)
+	sha256sum -c $(FLASH_BACKUP).sha256
+	$(QUARTUS_BIN)/quartus_pgm --no_banner --mode=jtag -o "IV;$(FLASH_BACKUP)"
+flash-zsad flash-s3x8: flash-%: jic-%
+	@test -f "$(FLASH_BACKUP)" || (echo "no factory backup: run make flash-backup first"; exit 1)
+	$(QUARTUS_BIN)/quartus_pgm --no_banner --mode=jtag -o "IPV;$(JIC_$*)"
+	@echo "written: power-cycle the board (SW19 = RUN) to boot $*"
+flash-restore:
+	@test -f "$(FLASH_BACKUP)" || (echo "no factory backup $(FLASH_BACKUP)"; exit 1)
+	sha256sum -c $(FLASH_BACKUP).sha256
+	$(QUARTUS_BIN)/quartus_pgm --no_banner --mode=jtag -o "IPV;$(FLASH_BACKUP)"
+	@echo "factory image restored: power-cycle the board"
 
 # ---------------------------------------------------------------- simulate
 sim-p1: venv-sim

@@ -95,3 +95,13 @@ Plan: object_tracking/presentation/demo/plan_P0_P1.md (approved 2026-10-05).
   | S-3x8 (default seed) | 60,718 (53 %) | 527,232 (13 %) | 60 (11 %) | +0.118 ns clk[1] |
 - Known limits: S-3x8 throughput ~1 ROI per 0.92 ms (FIFO holds 2 ROI frames; more back to back = dropped rows, reported as incomplete frames, never wrong results). The clk[1] RGMII path is seed-sensitive: a future change can need another seed. A tracker timeout still stalls the receiver (up to 10 ms) at the next cropped frame.
 - Not done: board tests (board unplugged). Next session: docs/NEXT_SESSION.md.
+
+## 2026-10-06 (evening) webcam, no-board mode, flash
+- Webcam (icSpring 32e6:9211, /dev/video0): first not readable over SSH (ACL only for the desktop user); the user added tharaka to the video group. Formats MJPG/YUYV up to 1280x720 at 30 fps. In this dim room auto exposure (aperture priority) gives 15 fps (MJPG and YUYV alike); manual exposure 25 ms + gain 48 gives 30 fps but a darker image (mean 38 vs 60). Camera controls restored to auto/gain 0 afterwards.
+- demo.py: `--no-board` (host model instead of the FPGA; labelled "NO BOARD: host model only, not the FPGA" on screen, "FPGA = model: n/a" in the summary); webcam via V4L2 MJPG, `--cam-size`, `--cam-exposure`, `--cam-gain`, buffer of 1 frame; the overlay names the tracker (it said "ZSAD" for S-3x8 too). OTB Walking no-board: ZSAD P@20 95.9 (= board P2 run), S-3x8 100.0; the S-3x8 Python model runs ~25 fps.
+- Webcam no-board run (ZSAD, box drawn on the page): 1070 frames, 5 rejects; user: "yes it works".
+- Board: only one of USB-Blaster or Ethernet can be connected (cable length). User chose to write the design to the EPCS64 flash, and asked to back up the factory test-pattern image first so it can be restored when the board is returned.
+  - .jic files built (quartus_cpf, EPCS64, SFL for EP4CE115 is installed). ZSAD rebuilt from the final sources to be sure: identical timing and LE count (deterministic).
+  - Makefile: flash-backup (examine EPCS64 -> ~/fpga_flash_backup/de2_115_epcs64_factory.pof + sha256, never overwrites), flash-check-backup (verify flash vs backup), flash-zsad / flash-s3x8 (refuse without a backup), flash-restore. README section "Flash".
+  - Bug found: `make program-*` never worked (pattern rules are skipped for .PHONY targets: "Nothing to be done"); now static pattern rules, dry-runs OK.
+  - Not yet tried on hardware (USB-Blaster not connected): whether examine (IE) and verify/program (IV/IPV) accept the .pof backup format. Checked first in the flash session, before anything is written.

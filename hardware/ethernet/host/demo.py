@@ -10,8 +10,9 @@ view is served as a live MJPEG page (http://<bind>:<port>/) and recorded as an M
   python3 demo.py --tracker zsad --crop fpga --source otb --seq Walking
   python3 demo.py --tracker s3x8 --crop fpga --source otb --seq Walking
   python3 demo.py --tracker zsad --source webcam --cam 0          # draw the box on the web page
+  python3 demo.py --tracker zsad --source webcam --no-board       # no board: host model only (labelled)
 """
-import argparse, csv, json, os, threading, time
+import argparse, csv, json, os, subprocess, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -119,9 +120,27 @@ class Source:
             self.name = a.seq
             self.gt_orig = d["gt_orig"]
         else:
-            self.cap = cv2.VideoCapture(a.cam)
+            self.cap = cv2.VideoCapture(a.cam, cv2.CAP_V4L2)
             if not self.cap.isOpened():
-                raise SystemExit(f"cannot open webcam {a.cam}")
+                raise SystemExit(f"cannot open webcam {a.cam} (is the user in the video group?)")
+            self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+            w, h = (int(v) for v in a.cam_size.split("x"))
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+            self.cap.set(cv2.CAP_PROP_FPS, 30)
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)              # newest frame, no backlog
+            # exposure: auto (aperture priority) can halve the frame rate in a dim room; a manual
+            # exposure below 33 ms keeps 30 fps (darker image: raise the gain)
+            if a.cam_exposure is not None:
+                ctrls = f"auto_exposure=1,exposure_time_absolute={a.cam_exposure}"
+            else:
+                ctrls = "auto_exposure=3"
+            if a.cam_gain is not None:
+                ctrls += f",gain={a.cam_gain}"
+            r = subprocess.run(["v4l2-ctl", "-d", f"/dev/video{a.cam}", "--set-ctrl", ctrls],
+                               capture_output=True, text=True)
+            if r.returncode != 0:
+                print(f"warning: camera controls not set ({ctrls}): {r.stderr.strip()}", flush=True)
             self.name = f"webcam{a.cam}"
             self.gt_orig = None
 
@@ -158,16 +177,25 @@ def draw(view_img, k, info):
     H = view_img.shape[0]
     pad = np.zeros((126, view_img.shape[1], 3), np.uint8)
     agree = info["agree_n"] == info["n"]
-    lines = [
-        (f"{info['name']}  frame {k if k is not None else info['n']}   FPGA = model: "
-         f"{'YES' if info['agree'] else 'NO'} ({info['agree_n']}/{info['n']})   "
-         f"ZSAD {info['score']}{'' if info['good'] else ' (rejected: hold)'}",
-         (0, 230, 0) if agree else (0, 0, 255)),
-        (f"FPGA compute {info['fpga_us']:.1f} us   network round trip {info['rtt_us']:.0f} us "
-         f"(transport, not part of the drone system)   {info['fps']:.1f} fps", (230, 230, 230)),
+    score_txt = f"{info['tshort']} score {info['score']}{'' if info['good'] else ' (rejected: hold)'}"
+    if info["agree"] is None:
+        lines = [
+            (f"{info['name']}  frame {k if k is not None else info['n']}   NO BOARD: host model only, "
+             f"not the FPGA   {score_txt}", (0, 200, 255)),
+            (f"{info['fps']:.1f} fps", (230, 230, 230)),
+        ]
+    else:
+        lines = [
+            (f"{info['name']}  frame {k if k is not None else info['n']}   FPGA = model: "
+             f"{'YES' if info['agree'] else 'NO'} ({info['agree_n']}/{info['n']})   {score_txt}",
+             (0, 230, 0) if agree else (0, 0, 255)),
+            (f"FPGA compute {info['fpga_us']:.1f} us   network round trip {info['rtt_us']:.0f} us "
+             f"(transport, not part of the drone system)   {info['fps']:.1f} fps", (230, 230, 230)),
+        ]
+    lines += [
         (NOTE, (180, 180, 180)),
-        ("Box: green = FPGA result (orange = rejected, hold)   grey = ground truth   dashed = ROI sent to FPGA",
-         (180, 180, 180)),
+        (f"Box: green = {'model' if info['agree'] is None else 'FPGA'} result (orange = rejected, hold)   "
+         f"grey = ground truth   dashed = ROI", (180, 180, 180)),
     ]
     for j, (txt, c) in enumerate(lines):
         cv2.putText(pad, txt, (10, 26 + 30 * j), cv2.FONT_HERSHEY_SIMPLEX, 0.55, c, 1, cv2.LINE_AA)
@@ -182,6 +210,10 @@ def main():
     ap.add_argument("--seq", default="Walking")
     ap.add_argument("--cam", type=int, default=0)
     ap.add_argument("--init-box", default=None, help="webcam: x,y,w,h in camera pixels")
+    ap.add_argument("--cam-size", default="640x480", help="webcam resolution (MJPG)")
+    ap.add_argument("--cam-exposure", type=int, default=None,
+                    help="webcam manual exposure in 100 us units (<= 330 keeps 30 fps); default: auto")
+    ap.add_argument("--cam-gain", type=int, default=None, help="webcam gain (0..63 on the icSpring camera)")
     ap.add_argument("--target-px", type=float, default=16.0)
     ap.add_argument("--fps", type=float, default=30.0)
     ap.add_argument("--loop", action="store_true", help="OTB: replay the sequence forever")
@@ -190,25 +222,31 @@ def main():
     ap.add_argument("--http-port", type=int, default=8090)
     ap.add_argument("--no-video", action="store_true")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--no-board", action="store_true",
+                    help="no board: the host model tracks (to test sources and the page); labelled on screen")
     a = ap.parse_args()
 
     global NOTE
     model = make_model(a.tracker)
     tname = {"zsad": "ZSAD 16x16", "s3x8": "S-3x8 int8 CNN"}[a.tracker]
+    tshort = {"zsad": "ZSAD", "s3x8": "S-3x8"}[a.tracker]
     NOTE = (f"Scaling on the server; {model.ROI}x{model.ROI} ROI crop in the FPGA; tracking on the DE2-115 ({tname})."
             if a.crop == "fpga" else
             f"Scaling + {model.ROI}x{model.ROI} ROI crop on the server; tracking on the DE2-115 ({tname}).")
+    if a.no_board:
+        NOTE = f"No board connected: scaling, {model.ROI}x{model.ROI} ROI crop and tracking ({tname}) in the host model."
     src = Source(a)
     out = a.out or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "results",
-                                f"demo3_{a.tracker}_{a.crop}_{src.name}_{time.strftime('%Y%m%d_%H%M%S')}")
+                                f"demo3_{a.tracker}_{'noboard' if a.no_board else a.crop}_{src.name}_{time.strftime('%Y%m%d_%H%M%S')}")
     os.makedirs(out, exist_ok=True)
     st = Stream()
     srv = ThreadingHTTPServer((a.bind, a.http_port), make_handler(st))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     print(f"view: http://{a.bind}:{a.http_port}/   output: {out}", flush=True)
 
-    link = BoardLink3(a.ip)
-    link.drain()
+    link = None if a.no_board else BoardLink3(a.ip)
+    if link is not None:
+        link.drain()
 
     # ---- first frame and box ----
     f0, k0 = src.next()
@@ -241,7 +279,7 @@ def main():
 
     def init_track(frame):
         t = Track(model, scaled(frame), ((box[0] + box[2] / 2) * s, (box[1] + box[3] / 2) * s))
-        if not (link.send_template(t.tmpl) and link.set_position(t.tx, t.ty)):
+        if link is not None and not (link.send_template(t.tmpl) and link.set_position(t.tx, t.ty)):
             raise SystemExit(f"board did not acknowledge template/position (is the p3 {a.tracker} bitstream loaded?)")
         return t
 
@@ -269,10 +307,13 @@ def main():
                 continue
             fp, (rx, ry), crop = tr.crop(scaled(f))
             mx, my, mz, mgood = model.match(crop)
-            res, t0, t1 = link.track(fid, fp if a.crop == "fpga" else crop)
+            res, t0, t1 = (None, None, None) if link is None else link.track(fid, fp if a.crop == "fpga" else crop)
             fid += 1
             n += 1
-            if res is None:
+            if link is None:                       # no board: the model's own result, never counted as agreement
+                ok, good, score, f_us, rtt = None, mgood, mz, float("nan"), float("nan")
+                tr.update((rx, ry), mx, my, mgood)
+            elif res is None:
                 ok, good, score, f_us, rtt = False, False, -1, float("nan"), float("nan")
                 tr.update((rx, ry), mx, my, mgood)
             else:
@@ -289,12 +330,12 @@ def main():
                     and (res["x"], res["y"]) == exp_xy
                 f_us = ((res["t_result"] - res["t_rx_end"]) & 0xFFFFFFFF) / FCLK * 1e6
                 rtt = (res["t_recv_ns"] - t1) / 1e3
-            agree_n += ok
+            agree_n += bool(ok)
             cx, cy = tr.center()
             now = time.perf_counter()
             fps_s = 0.9 * fps_s + 0.1 * (1.0 / max(1e-6, now - t_prev)) if fps_s else 1.0 / max(1e-6, now - t_prev)
             t_prev = now
-            info = dict(name=src.name, n=n, agree=ok, agree_n=agree_n, score=score, good=good,
+            info = dict(name=src.name, tshort=tshort, n=n, agree=ok, agree_n=agree_n, score=score, good=good,
                         fpga_us=f_us, rtt_us=rtt, fps=fps_s, view_scale=vs,
                         center=(cx / s, cy / s), box_wh=(box[2], box[3]),
                         roi=(rx / s, ry / s, model.ROI / s),
@@ -304,7 +345,7 @@ def main():
             if vw is not None:
                 vw.write(view)
             rows.append([n, k, rx, ry, None if res is None else res["x"], None if res is None else res["y"],
-                         score, int(good), mx, my, mz, int(mgood), int(ok),
+                         score, int(good), mx, my, mz, int(mgood), "" if ok is None else int(ok),
                          round(f_us, 2), round(rtt, 1), round(cx / s, 1), round(cy / s, 1)])
             if k is not None:
                 preds.append((k, cx, cy))
@@ -325,13 +366,13 @@ def main():
         w.writerow(["n", "frame", "roi_x", "roi_y", "fpga_x", "fpga_y", "fpga_score", "fpga_good", "model_x",
                     "model_y", "model_score", "model_good", "agree", "fpga_compute_us", "rtt_us", "cx_orig", "cy_orig"])
         w.writerows(rows)
-    fu = np.array([r[13] for r in rows], float)
-    rt = np.array([r[14] for r in rows], float)
+    fu = np.array([r[13] for r in rows] or [np.nan], float)
+    rt = np.array([r[14] for r in rows] or [np.nan], float)
     lines = [f"# P3 demo run: {a.tracker}, crop {a.crop}, {src.name}", "",
              f"command: `python3 demo.py {' '.join(f'--{k.replace(chr(95), chr(45))} {v}' for k, v in vars(a).items() if v not in (None, False))}`", "",
              "| metric | value |", "|---|---|",
              f"| frames tracked | {n} |",
-             f"| FPGA = model | {agree_n}/{n} |",
+             f"| FPGA = model | {'n/a (no board: host model only)' if a.no_board else f'{agree_n}/{n}'} |",
              f"| rejected matches (hold) | {sum(1 for r in rows if r[7] == 0)} |",
              f"| FPGA compute after the last row (us) | p50 {np.nanpercentile(fu, 50):.1f}, max {np.nanmax(fu):.1f} |",
              f"| network round trip, last row sent -> result (us) | p50 {np.nanpercentile(rt, 50):.0f}, p99 {np.nanpercentile(rt, 99):.0f}, max {np.nanmax(rt):.0f} |"]
