@@ -28,13 +28,21 @@ class ZsadModel:
         return np.ascontiguousarray(frame[ty:ty + WIN, tx:tx + WIN], dtype=np.uint8).tobytes()
 
     def match(self, roi):
+        bx, by, z, good, _ = self.inspect(roi)
+        return bx, by, z, good
+
+    def inspect(self, roi):
+        """match() plus what the demo displays: {"map": ZSAD scores (65, 65)}."""
         t = np.frombuffer(self._t, np.uint8).reshape(WIN, WIN).astype(np.int64)
         w = sliding_window_view(roi.astype(np.int64), (WIN, WIN))
         delta = (w.sum((2, 3)) - t.sum() + (WIN * WIN) // 2) >> 8
         m = np.abs(w - t - delta[..., None, None]).sum((2, 3))
         by, bx = divmod(int(np.argmin(m)), m.shape[1])     # first minimum in raster order
         z = int(m[by, bx])
-        return bx, by, min(z, self.SCORE_SAT), z <= self.REJECT_SAD
+        return bx, by, min(z, self.SCORE_SAT), z <= self.REJECT_SAD, {"map": m}
+
+    def template_features(self):
+        return None
 
     def set_template(self, tb):
         self._t = bytes(tb)
@@ -87,13 +95,21 @@ class S3x8Model:
         self._tf = a.transpose(2, 0, 1).astype(np.int64)              # (c, r, k)
 
     def match(self, roi):
+        bx, by, z, good, _ = self.inspect(roi)
+        return bx, by, z, good
+
+    def inspect(self, roi):
+        """match() plus what the demo displays: {"map": L1 scores (49, 49), "feat": ROI features (8, 64, 64)}."""
         m = self.PAD - len(self.layers)
         nc = self.ROI - WIN - 2 * self.PAD + 1                          # 49
         f = self.embed(roi)[:, m:m + nc + WIN - 1, m:m + nc + WIN - 1]  # (8, 64, 64)
         w = sliding_window_view(f, (WIN, WIN), axis=(1, 2))             # (8, 49, 49, 16, 16)
         s = np.abs(w - self._tf[:, None, None]).sum((0, 3, 4))
         by, bx = divmod(int(np.argmin(s)), s.shape[1])
-        return bx, by, int(s[by, bx]), True
+        return bx, by, int(s[by, bx]), True, {"map": s, "feat": f}
+
+    def template_features(self):
+        return self._tf                                                  # (8, 16, 16)
 
 
 def make_model(name):

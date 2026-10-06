@@ -105,3 +105,21 @@ Plan: object_tracking/presentation/demo/plan_P0_P1.md (approved 2026-10-05).
   - Makefile: flash-backup (examine EPCS64 -> ~/fpga_flash_backup/de2_115_epcs64_factory.pof + sha256, never overwrites), flash-check-backup (verify flash vs backup), flash-zsad / flash-s3x8 (refuse without a backup), flash-restore. README section "Flash".
   - Bug found: `make program-*` never worked (pattern rules are skipped for .PHONY targets: "Nothing to be done"); now static pattern rules, dry-runs OK.
   - Not yet tried on hardware (USB-Blaster not connected): whether examine (IE) and verify/program (IV/IPV) accept the .pof backup format. Checked first in the flash session, before anything is written.
+
+## 2026-10-06 (night) full board test (Ethernet + JTAG both connected) and the dashboard
+- User connected both cables (no flash needed). Board tests, results in hardware/ethernet/results/recheck_20261006/ and results/p3_check_*:
+  | # | test | result |
+  | 1 | JTAG | EP4CE115 (020F70DD); `make program-*` works on hardware after the static-pattern fix |
+  | 2 | P1 loopback 1000 frames 30 fps | 1000/1000 OK, 0 lost/bad/checksum; RTT p50 584 us |
+  | 3 | P1 faults | 19/19 |
+  | 4 | P2 Walking 50 | 50/50 FPGA = model |
+  | 5-7 | P3 ZSAD check-all (4 seq x fpga/server crop, full sequences) | 3404/3404 FPGA = model; result 0-3 us after the last row (RTL crop); P@20 Walking 95.9, Jumping 99.4, BlurOwl 98.9, Bolt 1.1 (= P2) |
+  | 8-9 | P3 S-3x8 check-all | 3404/3404 FPGA = model; result 0.29-0.67 ms after the last row; LEDR17 (overrun) off (user); P@20 100 / 100 / 99.8 / 1.4 |
+  | 10 | live demo S-3x8 RTL crop, Walking loop, on the server monitor | 2231/2231 |
+  | 11 | webcam on the board, S-3x8 RTL crop | 3532/3532; user: "webcam works" |
+- The monitor is on the server (user logged in on the desktop as tharaka, X11 :1); Firefox opened there from SSH.
+- User: do both fixes (30 fps; full-screen page) and "display every possible thing including the templates".
+  - 30 fps: the host now follows the FPGA's own result; the bit-exact model check runs in 4 worker processes (every frame still checked, shown with its lag). trackers.py: match() now calls inspect() (same arithmetic; also returns the score map and, for S-3x8, the ROI features). Board runs after the change: S-3x8 and ZSAD Walking 411/411 checked, P@20 unchanged (100.0 / 95.9), display 29.7 / 30.0 fps with 1080p recording.
+  - Page: the image is scaled to the window (aspect kept; box drawing maps back); a new box can be drawn at any time to re-select the target (webcam).
+  - host/dash.py: 1920x1080 dashboard: camera view (boxes, GT, ROI), FPGA input (whole scaled gray frame + ROI), ROI with the FPGA's best window, model score map (frame shown), template (gray patch; S-3x8 int8 features, 8 ch), ROI features (S-3x8) or best window + |zero-mean diff| (ZSAD), status with decoded flags, rows, origin, FPGA receive time, compute after the last row, round trip, plots of score / FPGA time / round trip / display fps.
+  - Webcam dashboard at night: 597/597 checked but display 8.2 fps: the room is darker and auto exposure stretches the camera frames (OTB runs at 30 fps with the same code). Remedy: --cam-exposure 250 --cam-gain 48 (not applied, the user's target was selected).

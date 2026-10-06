@@ -1,22 +1,22 @@
-# Next session: where to start (written 2026-10-06, after the P3 simulation fixes)
+# Next session: where to start (written 2026-10-06 night, after the full board test)
 
 Board repo: `~/Documents/Low-Latency-Visual-Object-Tracking` (branch `ethernet-demo`, nothing pushed). Everything runs from `hardware/ethernet/`: `make help`. Full history: `docs/demo_log.md`.
 
 ## State in one paragraph
 - **P1 and P2 are done and board-tested.** P1: Ethernet row protocol, 0 errors at 30 fps and at line rate. P2: ZSAD on a server-cropped 80×80 ROI, FPGA = model on every frame, stress-tested.
-- **P3 is done in simulation, not yet on the board.** ROI crop in the RTL, position held by the FPGA, tracker chosen at build time (ZSAD or S-3x8), no one-in-flight block.
-  - Testbench (`make sim-zsad`, `make sim-s3x8`): **ZSAD 28/28, S-3x8 28/28**, FPGA = model on every frame.
-  - Builds, all timing corners met: ZSAD 25 % LE (fitter seed 2, `p3_track/seed_2.qsf`), S-3x8 53 % LE, 60 multipliers, 13 % memory.
-  - Bugs fixed on 2026-10-06: early tracker result lost with the RTL crop (now latched); S-3x8 stream shifted by one column after `sof` and by 5 columns when `sof` followed `done` (gap + drain); S-3x8 tracker FIFO 16 k words (two ROI frames); testbench waited for the wrong result.
+- **P3 is done and board-tested (2026-10-06 night).** ROI crop in the RTL, position held by the FPGA, tracker chosen at build time (ZSAD or S-3x8). ZSAD 3404/3404 and S-3x8 3404/3404 frames FPGA = model (4 sequences, both crop modes); webcam on the board works.
+  - Testbench (`make sim-zsad`, `make sim-s3x8`): 28/28 each. Builds meet timing at all corners: ZSAD 25 % LE (seed 2), S-3x8 53 % LE, 60 mult, 13 % memory.
+- **Demo:** `host/demo.py` + `host/dash.py`: 1920x1080 dashboard (camera, FPGA input, ROI + best window, score map, template and features, plots), 30 fps, every frame checked against the bit-exact model in background processes. Shown on the server monitor (Firefox on display :1).
+  - `make demo TRACKER=s3x8 CROP=fpga SEQ=Walking`, or webcam: `cd host && python3 demo.py --tracker s3x8 --source webcam --cam 0` (draw the box on the page; draw again to re-select). In a dark room add `--cam-exposure 250 --cam-gain 48` for 30 fps.
 
-## Flash session (USB-Blaster connected, Ethernet not needed)
+## Flash session (only needed when USB-Blaster and Ethernet cannot both be connected)
 Only one of USB-Blaster / Ethernet can be connected (cable length), so the design goes into the EPCS64 flash. Stop at the first failure:
 1. `make jtag`: EP4CE115 listed.
 2. `make flash-backup`: factory image -> `~/fpga_flash_backup/de2_115_epcs64_factory.pof`. **Untested:** whether `IE` writes a usable .pof. Copy it to the laptop as a second copy.
 3. `make flash-check-backup`: verify passes (flash = backup). This proves the restore file works **before** anything is written. If the .pof format is refused, fix the restore path first (e.g. examine to .jic, or convert), do not flash.
 4. `make flash-zsad` (or `flash-s3x8`), then unplug USB, plug Ethernet, power-cycle with SW19 = RUN, and continue with the board tests below from step 5 (`make check ...`; skip `program-...`).
 5. Before returning the board: `make flash-restore`, power-cycle, check the factory test pattern.
-Note: `make program-*` was broken until 2026-10-06 evening (fixed, dry-run only). Board tests 2-4 below (P1/P2 regressions) need JTAG + Ethernet together; with the flash they would need P1/P2 flashed as well (no flash target for them yet): skip or decide then.
+Note: `make program-*` was broken until 2026-10-06 evening (fixed; works on hardware). Board tests 2-4 below (P1/P2 regressions) need JTAG + Ethernet together; with the flash they would need P1/P2 flashed as well (no flash target for them yet): skip or decide then.
 
 ## Board tests (plug in the board, ENET0 cable; JTAG via the USB-Blaster)
 Do these in order, and stop at the first failure:
