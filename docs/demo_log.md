@@ -123,3 +123,62 @@ Plan: object_tracking/presentation/demo/plan_P0_P1.md (approved 2026-10-05).
   - Page: the image is scaled to the window (aspect kept; box drawing maps back); a new box can be drawn at any time to re-select the target (webcam).
   - host/dash.py: 1920x1080 dashboard: camera view (boxes, GT, ROI), FPGA input (whole scaled gray frame + ROI), ROI with the FPGA's best window, model score map (frame shown), template (gray patch; S-3x8 int8 features, 8 ch), ROI features (S-3x8) or best window + |zero-mean diff| (ZSAD), status with decoded flags, rows, origin, FPGA receive time, compute after the last row, round trip, plots of score / FPGA time / round trip / display fps.
   - Webcam dashboard at night: 597/597 checked but display 8.2 fps: the room is darker and auto exposure stretches the camera frames (OTB runs at 30 fps with the same code). Remedy: --cam-exposure 250 --cam-gain 48 (not applied, the user's target was selected).
+
+## 2026-10-06 (late night) P3b part A: speed test (plan_P3b.md, approved "yes go ahead, start with the speed test")
+- User choices for P3b: ROI 96 (both, S-3x8 first), real OSTrack corrections (K3 rule, ost-gated 0.6), position + template, tracker-switch button. User idea kept for later: template-only correction with a larger ROI when the request frame is old.
+- New tools: host/speed_send.c (paced C sender, sendmmsg per frame, receiver thread with kernel timestamps), host/speed3.py (rate sweep, every tracked result checked against the bit-exact model on its own; FPGA crop also checks the origin rule), `make speed TRACKER=.. CROP=..`. System matplotlib is broken on the server (numpy ABI): plots go through the research .venv.
+- Results (Walking, 72x72 / 80x80 ROI; full frame 282x212 = 59.8 kB), results/speed_<tracker>_<crop>_Walking:
+  | tracker / crop | max clean rate | limit |
+  | S-3x8 server | 1050 fps (1100: 16 % incomplete) | core 72 lines x 800 clk @ 62.5 MHz ≈ 0.92 ms |
+  | S-3x8 fpga | 500 fps (750: 4 % incomplete; >= 900 every 2nd frame cut) | next crop needs the previous result; rows arriving before it are lost |
+  | ZSAD server | 3000 fps (line rate 6433: 28 % cut) | core ~30 us after the last row |
+  | ZSAD fpga | 1629 fps = the link (whole frames at line rate) | Ethernet |
+  Latency at normal rates: S-3x8 0.79 ms after the last row, round trip 0.87 ms; ZSAD server 5-30 us / 0.09 ms, ZSAD fpga crop 0-2 us / 0.3 ms.
+- ZSAD fpga crop: the first step (30 fps) after programming got 201/300 results (frames lost at the start, probably the link after programming); every later step was complete.
+- **Bug found: S-3x8 FPGA crop at 1100-1200 fps gave wrong results flagged complete + tracked** (1100: 208/1650 and 219/1650 on two runs; 1150: 2; 1200: 1). All other steps and all server-crop steps 100 % FPGA = model.
+  - Pattern: the frame before was cut (incomplete); FPGA score far below the model's minimum; reported candidate row always 45; no row/column/stream shift and no mix with the previous frame explains it.
+  - Cause (from the E48 matcher source): after a cut frame the matcher can be in a candidate-row job (784 clk). s3x8_core drained only 256 clk before sof; sof clears busy/acc but not the adder pipeline, so the tail of the old job accumulates a partial row sum into the new frame and wins the compare.
+  - Fix (user: "if it too much of a fix, note it ... otherwise fix it"): s3x8_core drains CUT_DRAIN_CLKS = 1024 after a frame that did not end with done (256 after a finished frame, so full speed is unchanged). Testbench sections 9 (cut mid-ROI), 10 (burst of back-to-back frames, each result checked on its own), 11 (cut at ROI rows 20..68 step 4, each followed by a full frame). The simulation did not reproduce the bug before the fix (sections 9 and 10 passed on the old RTL); the board re-run is the real check.
+- Noted for later (not fixed): above the limit throughput collapses (S-3x8 server: 3000 fps sent -> 16 tracked/s) because cut frames still use the tracker; dropping whole frames when the tracker is busy would keep ~1000/s.
+- After the fix (board, 2026-10-07 ~00:00): S-3x8 FPGA crop sweep 100 % FPGA = model at every step (1100 fps: 1650/1650; clean max still 500 fps, limited by the result dependency); server crop unchanged (clean 1050). Build: 60,757 LE (53 %), worst setup +0.094 ns. Testbench s3x8 46/46 (sections 1-11). Commit 5f1d6a7 (board repo, no co-author). Copies: presentation/demo/speed/.
+
+## 2026-10-07 (night) P3b parts C + D: OSTrack corrections and the control panel (user: "yes go ahead with part C")
+- host/heavy_server.py runs OSTrack-256 in the research .venv-heavy (GPU). It reuses E45 ost() (official weights; peak = score-map max) and the E49 gated query (search at the FPGA position with the heavy's own box size; if the peak < 0.6, search again at the heavy's own box; keep the higher peak). Standalone on Walking: about 13 ms per call after warm-up (the first call takes 270 ms, so init now does one warm-up call); boxes within a few px of GT. Start-up about 5 s.
+- host/corrections.py implements the K3 rule as in linksim/E45 simulate_lazy. The request goes out at frame s = multiple of N, with the FPGA position edge(s) and frame s. At s + L, or when the answer arrives if later ("late"), it applies p <- p_fpga + heavy(s) - edge(s), clipped, and in pos+tmpl mode a template re-cut from frame s at heavy(s), the same cut as the initial one.
+  - Order per frame: track, then apply the due corrections (set position + template upload, before the next frame), then request. This is the research order.
+  - Request ids are unique over the run, so a late answer from an old session cannot match a new one.
+- demo.py is restructured into sessions. The control panel on the page has: source (any OTB-100 sequence lazily read, or webcam), tracker, crop, start/switch, restart, pause, reset to GT, loop, fps, and corrections on/off with N, L and mode.
+  - A tracker switch runs `make program-<t>`.
+  - Each session gets its own folder: frames.csv (with request/applied columns), corrections.csv, summary.md and demo.mp4. controls.csv logs every change.
+  - SIGTERM/SIGINT stop cleanly. The page reconnects the stream after a restart.
+- dash.py shows:
+  - banners for each request and applied correction (bottom of the camera view)
+  - the magenta OSTrack box (at its request frame)
+  - a magenta frame around a new template, with the previous template next to it
+  - request/apply lines on all plots and a plot of the drift at each request
+  - a two-line corrections status
+- Board tests (S-3x8 bitstream unless noted; results/p3b_*):
+  - **try1 (first run, video on):** 119/411 frames had no result (1 s timeouts) from frame 1 on, and 23 mismatches after the correction at frame 306 (FPGA scores differ = FPGA template != host template).
+    - Not reproduced in 3 further runs with the same and lighter settings (411/411 each; corrections 8/8 on time).
+    - The board was healthy right after (make check 100/100). Other users' jobs were running on the server (a niced tracker process at 100 % CPU, an iverilog vvp at 100 %).
+    - Cause unknown (transient packet loss host <-> board; the mismatches follow from a template upload whose ack was lost while the host had already switched templates).
+    - Fix for that part: a correction now retries up to 3 times and changes the host's position/template only for what the board acknowledged; otherwise a red banner, counted as "not acknowledged".
+  - **try2/try3:** 411/411 FPGA = model, P@20 100. 8 corrections, all on time, drift at the request 0.8-1.2 px (scaled), OSTrack 13.7 ms p50, 1.23-1.25 GPU calls per request (cf. research 1.22-1.25). Display 30.0 fps without video, 27.1 with video.
+  - **Interactive (loop, no video):**
+    - Session 1 S-3x8 fpga Walking: 1300/1300. N=10, L=15, 15 fps changed live.
+    - Session 2: ZSAD switch (board reprogrammed from the page), Jumping: 551/551.
+    - Session 3: ZSAD server crop BlurOwl: 299/299.
+    - Session 4: back to S-3x8 Walking.
+    - Pause/resume OK.
+    - Webcam: "cannot open webcam 0", handled on the page; the camera is unplugged (no /dev/video*), so the webcam path through the page is untested.
+  - Live now on the server monitor: S-3x8 Walking loop with corrections N=30, L=6 (results/p3b_live); 713/713 at the screenshot, 29.6 fps.
+- Notes:
+  - OSTrack takes about 5 s to load at demo start, so the first request of the first session comes around frame 180.
+  - The demo scales the target to 16 px (research 20 px) and the S-3x8 ROI is still 72 (part B, ROI 96, not started).
+- Commit 510785a (board repo, no co-author). Screens: presentation/demo/screens/p3b_*.png.
+- User 2026-10-07: "no need for 96x96 for now". Part B (larger ROI) deferred; the demo keeps ROI 72 (S-3x8) / 80 (ZSAD). P3b closed otherwise.
+- Webcam test through the page (2026-10-07 ~01:40; user drew the boxes; webcam plugged in again):
+  - Page switch OTB -> webcam (in the user's session 59: S-3x8, server crop, N=17, L=11, position only): 991/991 FPGA = model, 58 requests / 56 applied, display 7.7 fps (auto exposure, dark room).
+  - Restart with --cam-exposure 250 --cam-gain 48: 210/210, corrections every 17 frames applied on time, display 14.9 fps.
+  - Camera alone (demo stopped), 640x480: MJPG and YUYV both 15.0 fps in manual exposure, 7.5-7.8 fps in auto. Manual exposure 5..300 changes neither the rate nor the brightness, so this camera caps itself at 15 fps in low light. The demo is not the limit (OTB runs at 29.6 fps); in a bright room it should give 30.
+  - The first target box was on a dark, low-texture area (uniform template, score ~2600 standing still): use a small object with contrast.
