@@ -52,3 +52,17 @@ def iou_auc(pred_c, gt_orig, scale):
     iou = inter / (w0 * h0 + g[:, 2] * g[:, 3] - inter)
     th = np.linspace(0, 1, 21)
     return float(np.mean([(iou > t).mean() for t in th]) * 100)
+
+
+def meta(key, target_px=16.0):
+    """Lazy variant of load() for the demo: image paths, GT (original px, invalid -> NaN) and the scale,
+    without reading the frames (long sequences would not fit in memory as colour frames)."""
+    m = otb_full.meta()[key]
+    imgs = [os.path.join(otb_full.ROOT, p) for p in m["img_names"]]
+    gt = np.array(m["gt_rect"], dtype=np.float64)[:, :4]
+    n = min(len(imgs), len(gt))
+    imgs, gt = imgs[:n], gt[:n].copy()
+    bad = ~np.isfinite(gt).all(1) | (gt[:, 2] <= 0) | (gt[:, 3] <= 0)
+    gt[bad] = np.nan
+    s = target_px / np.sqrt(gt[0, 2] * gt[0, 3])
+    return dict(name=key, paths=imgs, gt_orig=gt, gt=gt * s, scale=s, attr=list(m["attr"]))

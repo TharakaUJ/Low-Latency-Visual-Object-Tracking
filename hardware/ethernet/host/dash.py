@@ -7,6 +7,8 @@ return what the dashboard shows: the full score map and, for S-3x8, the ROI feat
 Dashboard: camera view with boxes, the scaled gray frame the FPGA receives, the ROI with the FPGA's
 best window, the score map, the template (gray patch and, for S-3x8, its int8 feature maps), the ROI
 feature maps, history plots (score, FPGA compute, round trip, fps) and the protocol flags.
+Server corrections (corrections.py): request / apply markers on the plots, banners and the OSTrack box on the
+camera view, the previous template next to the new one, and a status line.
 """
 from collections import deque
 from concurrent.futures import ProcessPoolExecutor
@@ -20,6 +22,7 @@ MAIN_W, MAIN_H = 1280, 720
 FONT = cv2.FONT_HERSHEY_SIMPLEX
 GREY, WHITE, GREEN, RED, ORANGE, CYAN, YELLOW = ((170, 170, 170), (235, 235, 235), (0, 220, 0), (0, 0, 255),
                                                  (0, 160, 255), (255, 200, 0), (0, 230, 230))
+MAGENTA, SKY = (255, 80, 255), (255, 180, 80)        # correction applied / OSTrack request
 FLAG_NAMES = ((1, "complete"), (2, "closed"), (4, "good"), (8, "tracked"), (16, "timeout"), (32, "RTL crop"))
 
 # ---------------------------------------------------------------- checker (worker processes)
@@ -126,9 +129,27 @@ def feat_grid(f, tile, amp, cols=4, gap=4):
     return g
 
 
-def plot(img, x, y, w, h, vals, name, unit, col, fmt="{:.0f}", lo=None, hi=None):
-    """Sparkline of the recent history with its range and last value (axis from the data unless lo/hi)."""
+def plot(img, x, y, w, h, vals, name, unit, col, fmt="{:.0f}", lo=None, hi=None, marks=(), dots=False):
+    """Sparkline of the recent history with its range and last value (axis from the data unless lo/hi).
+    marks: (deque of bool aligned with vals, colour): vertical lines at the frames where it is True.
+    dots: draw the values as dots (sparse series with gaps)."""
     cv2.rectangle(img, (x, y), (x + w, y + h), (60, 60, 60), 1)
+    n = len(vals)
+    for mk, mc in marks:
+        for i, on in enumerate(mk):
+            if on and n > 1:
+                xi = int(x + i * w / (n - 1))
+                cv2.line(img, (xi, y + 1), (xi, y + h - 1), mc, 1)
+    if dots:
+        pts = [(i, q) for i, q in enumerate(vals) if q is not None and np.isfinite(q)]
+        hi_ = max([q for _, q in pts], default=1.0) if hi is None else hi
+        hi_ = max(hi_, 1e-9)
+        title(img, f"{name} [{unit}]" + (": " + fmt.format(pts[-1][1]) if pts else ""), x + 4, y - 6)
+        for i, q in pts:
+            cv2.circle(img, (int(x + i * w / max(1, n - 1)), int(y + h - min(q, hi_) / hi_ * (h - 6) - 3)), 3, col, -1)
+        text(img, fmt.format(hi_), x + w + 4, y + 12, GREY, 0.4)
+        text(img, "0", x + w + 4, y + h, GREY, 0.4)
+        return
     v = np.array([q for q in vals if q is not None and np.isfinite(q)], float)
     if len(v) < 2:
         title(img, f"{name} [{unit}]", x + 4, y - 6)
@@ -149,7 +170,7 @@ def plot(img, x, y, w, h, vals, name, unit, col, fmt="{:.0f}", lo=None, hi=None)
 class Dash:
     def __init__(self, model, tname, note, hist=300):
         self.m, self.tname, self.note = model, tname, note
-        self.h = {k: deque(maxlen=hist) for k in ("score", "fpga_us", "rtt_us", "fps")}
+        self.h = {k: deque(maxlen=hist) for k in ("score", "fpga_us", "rtt_us", "fps", "req", "app", "drift")}
         self.last_check = None
         self.checked = self.mismatch = 0
         self.first_bad = None
@@ -165,7 +186,9 @@ class Dash:
     def render(self, d):
         """d: frame (BGR, camera), n, k, name, mode, view boxes, fp (scaled gray frame), roi, origin,
         best (window top-left in the ROI or None), res, score, good, f_us, rtt_us, rx_us, fps,
-        tmpl_patch (16x16 gray), tmpl_feat (or None), lag, board (bool), init (bool)."""
+        tmpl_patch (16x16 gray), tmpl_feat (or None), lag, board (bool), init (bool);
+        corrections: corr (status dict or None), banners [(text, colour)], heavy_box (original px or None),
+        tmpl_prev (previous template patch or None) and tmpl_note."""
         img = np.zeros((H, W, 3), np.uint8)
         m = self.m
         # ---- camera view
@@ -182,8 +205,20 @@ class Dash:
         for t in range(a[1], a[3], 10):
             cv2.line(v, (a[0] - ox, t - oy), (a[0] - ox, min(t + 5, a[3]) - oy), CYAN, 1)
             cv2.line(v, (a[2] - ox, t - oy), (a[2] - ox, min(t + 5, a[3]) - oy), CYAN, 1)
+        if d.get("heavy_box") is not None:                 # OSTrack's answer (box at its request frame)
+            a = bx(d["heavy_box"])
+            cv2.rectangle(v, (a[0] - ox, a[1] - oy), (a[2] - ox, a[3] - oy), MAGENTA, 2)
         a = bx(d["box"])
         cv2.rectangle(v, (a[0] - ox, a[1] - oy), (a[2] - ox, a[3] - oy), GREEN if d["good"] else ORANGE, 2)
+        for i, (tx_, col) in enumerate(reversed(d.get("banners") or [])):    # bottom of the camera view
+            fs_ = 0.7
+            while cv2.getTextSize(tx_, FONT, fs_, 2)[0][0] > v.shape[1] - 40 and fs_ > 0.4:
+                fs_ -= 0.05
+            (tw, th_), _ = cv2.getTextSize(tx_, FONT, fs_, 2)
+            y0 = v.shape[0] - 12 - (i + 1) * (th_ + 26)
+            cv2.rectangle(v, (8, y0), (8 + tw + 16, y0 + th_ + 18), (20, 20, 20), -1)
+            cv2.rectangle(v, (8, y0), (8 + tw + 16, y0 + th_ + 18), col, 2)
+            cv2.putText(v, tx_, (16, y0 + th_ + 8), FONT, fs_, col, 2, cv2.LINE_AA)
         paste(img, v, ox, oy)
 
         # ---- right column: what the FPGA gets
@@ -220,9 +255,16 @@ class Dash:
             paste(img, hv, X + t + 16, y)
         y += t + 34
 
-        # template
-        title(img, "template (target, 16x16 gray)" if d["tmpl_feat"] is None else "template: target patch | int8 features (8 ch)", X, y - 8)
+        # template (and the one it replaced at the last template correction)
+        title(img, ("template (target, 16x16 gray)" if d["tmpl_feat"] is None else "template: target patch | int8 features (8 ch)")
+              + (f"   {d['tmpl_note']}" if d.get("tmpl_note") else ""), X, y - 8)
         paste(img, gray_tile(d["tmpl_patch"], (128, 128)), X, y)
+        if d.get("tmpl_prev") is not None:
+            cv2.rectangle(img, (X - 2, y - 2), (X + 129, y + 129), MAGENTA, 2)
+            px_ = X + (400 if d["tmpl_feat"] is not None else 432)
+            if px_ + 64 < W:
+                paste(img, gray_tile(d["tmpl_prev"], (64, 64)), px_, y)
+                text(img, "previous", px_, y + 80, GREY, 0.4)
         if d["tmpl_feat"] is not None:
             amp = max(1.0, float(np.abs(d["tmpl_feat"]).max()))
             g = feat_grid(d["tmpl_feat"], 60, amp)
@@ -251,32 +293,40 @@ class Dash:
         line1 = f"{d['name']}  frame {d['k'] if d['k'] is not None else d['n']}   {self.tname}   " \
                 f"{'crop in the FPGA (RTL)' if d['mode'] == 'fpga' else 'crop on the server'}" if board else \
                 f"{d['name']}  frame {d['n']}   {self.tname}   NO BOARD: host model only, not the FPGA"
-        text(img, line1, 12, Y + 22, WHITE, 0.62)
+        text(img, line1, 12, Y + 22, WHITE, 0.6)
         if board:
             ok_col = GREEN if self.mismatch == 0 else RED
             text(img, f"FPGA = bit-exact model: {self.checked - self.mismatch}/{self.checked} frames checked"
                       f"{'' if self.mismatch == 0 else f'   MISMATCH x{self.mismatch} (first at frame {self.first_bad})'}"
-                      f"   (check lag {d['lag']} frames)", 12, Y + 50, ok_col, 0.62)
+                      f"   (check lag {d['lag']} frames)", 12, Y + 48, ok_col, 0.6)
             r = d["res"]
             if r is not None:
                 fl = ", ".join(nm for b, nm in FLAG_NAMES if r["flags"] & b)
                 text(img, f"result: score {r['score']} ({'good' if d['good'] else 'rejected: hold'})   position ({r['x']},{r['y']})"
                           f"   ROI origin ({r['roi_x']},{r['roi_y']})   rows {r['rows_seen']}/{r['height']}   flags {fl}",
-                     12, Y + 78, WHITE, 0.5)
+                     12, Y + 72, WHITE, 0.48)
             else:
-                text(img, "result: none (timeout)", 12, Y + 78, RED, 0.5)
+                text(img, "result: none (timeout)", 12, Y + 72, RED, 0.48)
             text(img, f"FPGA: frame in over {d['rx_us']:.0f} us, result {d['f_us']:.1f} us after the last row   "
                       f"network round trip {d['rtt_us']:.0f} us (transport, not part of the drone system)   "
-                      f"display {d['fps']:.1f} fps", 12, Y + 102, WHITE, 0.5)
+                      f"display {d['fps']:.1f} fps", 12, Y + 94, WHITE, 0.48)
         else:
             text(img, f"model score {d['score']} ({'good' if d['good'] else 'rejected: hold'})   display {d['fps']:.1f} fps",
                  12, Y + 50, ORANGE, 0.6)
-        text(img, self.note, 12, Y + 126, GREY, 0.5)
-        text(img, "boxes: green = result (orange = rejected, hold)   grey = ground truth   dashed = ROI", 12, Y + 148, GREY, 0.45)
-        pw, ph, py = 280, 110, Y + 192
-        plot(img, 12, py, pw, ph, self.h["score"], "score", "low = good", (0, 200, 255))
+        cs = d.get("corr")
+        if cs is not None:
+            for i, ln in enumerate(cs["lines"][:2]):
+                text(img, ln, 12, Y + 118 + 22 * i, cs["col"], 0.48)
+        text(img, self.note, 12, Y + 162, GREY, 0.42)
+        text(img, "boxes: green = result (orange = rejected, hold)   grey = ground truth   dashed = ROI   magenta = OSTrack "
+                  "(at its request frame)   plots: blue line = request, magenta = applied", 12, Y + 180, GREY, 0.4)
+        pw, ph, py = 210, 84, Y + 214
+        mk = ((self.h["req"], (120, 90, 40)), (self.h["app"], (140, 40, 140)))
+        plot(img, 12, py, pw, ph, self.h["score"], "score", "low=good", (0, 200, 255), marks=mk)
         if board:
-            plot(img, 12 + 320, py, pw, ph, self.h["fpga_us"], "FPGA after last row", "us", GREEN, "{:.1f}")
-            plot(img, 12 + 640, py, pw, ph, self.h["rtt_us"], "round trip", "us", CYAN)
-        plot(img, 12 + 960, py, pw, ph, self.h["fps"], "display rate", "fps", WHITE, "{:.1f}", 0, 40)
+            plot(img, 12 + 252, py, pw, ph, self.h["fpga_us"], "FPGA compute", "us", GREEN, "{:.1f}", marks=mk)
+            plot(img, 12 + 504, py, pw, ph, self.h["rtt_us"], "round trip", "us", CYAN, marks=mk)
+        plot(img, 12 + 756, py, pw, ph, self.h["drift"], "drift at request", "px", MAGENTA, "{:.1f}",
+             marks=mk, dots=True)
+        plot(img, 12 + 1008, py, pw, ph, self.h["fps"], "display", "fps", WHITE, "{:.1f}", 0, 40)
         return img

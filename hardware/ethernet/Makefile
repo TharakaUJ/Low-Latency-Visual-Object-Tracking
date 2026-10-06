@@ -141,9 +141,9 @@ check-all:
 speed:
 	cd host && $(PY) speed3.py --ip $(BOARD_IP) --tracker $(TRACKER) --crop $(CROP) --seq $(SEQ) \
 	  --out $(RESULTS)/speed_$(TRACKER)_$(CROP)_$(SEQ)
+# live page with the control panel and OSTrack corrections; output results/demo3_<time>/<session>/
 demo:
-	cd host && $(PY) demo.py --ip $(BOARD_IP) --tracker $(TRACKER) --crop $(CROP) --source otb --seq $(SEQ) --fps $(FPS) \
-	  --out $(RESULTS)/demo3_$(TRACKER)_$(CROP)_$(SEQ)
+	cd host && $(PY) demo.py --ip $(BOARD_IP) --tracker $(TRACKER) --crop $(CROP) --source otb --seq $(SEQ) --fps $(FPS) --loop
 demo-loop:
 	cd host && $(PY) demo.py --ip $(BOARD_IP) --tracker $(TRACKER) --crop $(CROP) --source otb --seq $(SEQ) --fps $(FPS) \
 	  --loop --no-video --out $(RESULTS)/demo3_loop

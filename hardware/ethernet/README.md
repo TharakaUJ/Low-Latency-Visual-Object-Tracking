@@ -16,6 +16,23 @@ make demo  TRACKER=zsad CROP=fpga SEQ=Walking         # live page: http://100.76
 make sim-zsad                     # cocotb + Verilator testbench (no board needed)
 ```
 
+## Demo page (P3b, 2026-10-07)
+`make demo` (or `cd host && python3 demo.py --tracker s3x8 --seq Walking --loop`) serves the 1920x1080 dashboard at
+http://100.76.229.14:8090/ with a control panel (key `c` hides it):
+- **source:** any OTB-100 sequence or the webcam (draw the box on the camera view; draw again to re-select). Also restart, pause, loop, reset to ground truth, fps.
+- **tracker and crop mode:** switching the tracker reprograms the board over JTAG (`make program-*`, ~10 s).
+- **server corrections:** OSTrack-256 on the GPU (`host/heavy_server.py`, started automatically in the research `.venv-heavy`), the K3 rule of the locked system (`host/corrections.py`):
+  - every N frames the FPGA position and the frame go to OSTrack (ost-gated τ 0.6)
+  - the answer is applied L frames later as a position offset (FPGA position + OSTrack − FPGA position at the request frame) and, in mode "position + template", a new template cut from the request frame
+  - N, L and the mode can be changed live
+- **On screen:** banners for each request and each applied correction, the OSTrack box, the previous template, request/apply markers on the plots, and the FPGA-vs-OSTrack drift at each request.
+- **Output:** each source run is a session folder in `results/demo3_<time>/` (`frames.csv`, `corrections.csv`, `summary.md`, `demo.mp4`). Every page change is logged in `controls.csv`.
+- **Stopping:** Ctrl-C or `kill` (SIGTERM) stops it cleanly. `--once` exits after the first session.
+
+`make speed TRACKER=.. CROP=..`: frame-rate sweep up to line rate (host/speed3.py + speed_send.c), every tracked result checked against the model. Walking:
+- S-3x8 is clean to 1050 fps with server crop and to 500 fps with FPGA crop.
+- ZSAD is clean to 3000 fps with server crop and to 1629 fps with FPGA crop (the link limit).
+
 ## Setup
 - **Board:** DE2-115, ENET0 port, jumper JP1 on pins 1-2 (RGMII). SW14/SW15 select the 7-segment view (see below); SW0/SW1 do not work on this board.
 - **Network:** lab LAN `10.8.100.0/24`. The board has static IP `10.8.100.230` (picked as free with nmap; not reserved: if DHCP ever hands it out, change `local_ip` in `rtl/fpga_core.v`), MAC `02:00:0a:08:64:e6`. It answers ARP; there is no ICMP, so `ping` does not work. If ARP fails, re-seat the cable: on 2026-10-05 the first jack/cable reached another segment (10.8.96.x).
