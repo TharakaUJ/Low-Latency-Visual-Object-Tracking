@@ -127,6 +127,17 @@ class TB:
             return False
 
 
+async def wait_fids(tb, fids, timeout_ns):
+    async def w():
+        while not set(fids) <= {r["frame_id"] for r in tb.results}:
+            await RisingEdge(tb.dut.clk)
+    try:
+        await with_timeout(w(), timeout_ns, "ns")
+        return True
+    except SimTimeoutError:
+        return False
+
+
 def row_pkt(fid, row, img, magic=0x5AA5):
     h, w = img.shape
     return HDR.pack(magic, fid, row, w, h) + img[row].tobytes()
@@ -185,6 +196,7 @@ async def run_test(dut):
     check(f"template ({nchunks} chunk(s)) + position acks", ok and tsum_ok and pos_ok, str(tb.acks))
 
     fid = 1000
+    rois = {}   # frame id -> (ROI the model matched, template bytes), dumped on a mismatch
 
     async def frame(img, name, wait=True, rows=None, expect_track=True, crop_expected=None):
         """Send a frame; compute the model's expectation; compare (if wait)."""
@@ -197,6 +209,7 @@ async def run_test(dut):
             fp = pad_to(img, R)
             o = tr.origin(fp.shape)
             roi = fp[o[1]:o[1] + R, o[0]:o[0] + R]
+            rois[f] = (roi.copy(), bytes(tr.tmpl), o)
             bx, by, z, good = model.match(roi)
             tr.update(o, bx, by, good)
             exp = dict(roi_x=o[0], roi_y=o[1], x=tr.tx, y=tr.ty, score=z,
@@ -205,7 +218,7 @@ async def run_test(dut):
             await tb.send(row_pkt(f, r, img))
         if not wait:
             return f, exp, n0
-        got_ok = await tb.wait_for(tb.results, n0 + 1, trk_ns)
+        got_ok = await wait_fids(tb, [f], trk_ns)
         return await compare(f, exp, name, got_ok)
 
     async def compare(f, exp, name, got_ok=True):
@@ -214,6 +227,12 @@ async def run_test(dut):
             check(name, g is not None, "no result")
             return g
         ok = g is not None and all(g[k] == v for k, v in exp.items())
+        if not ok and f in rois:
+            roi, tm, o = rois[f]
+            np.savez(os.path.join(tests_dir, f"mismatch_{TRACKER}_{f}.npz"), roi=roi,
+                     tmpl=np.frombuffer(tm, np.uint8), origin=np.array(o),
+                     exp=np.array([exp.get(k, -1) for k in F[11:]]),
+                     got=np.array([-1 if g is None else g[k] for k in F[11:]]))
         check(name, ok, f"expected {exp} got {None if g is None else {k: g[k] for k in exp}}")
         return g
 
@@ -268,7 +287,7 @@ async def run_test(dut):
             n0 = len(tb.results)
             for r in range(R):
                 await tb.send(row_pkt(f, r, roi))
-            await tb.wait_for(tb.results, n0 + 1, trk_ns)
+            await wait_fids(tb, [f], trk_ns)
             await compare(f, dict(roi_x=0, roi_y=0, x=bx + model.MARGIN, y=by + model.MARGIN, score=z,
                                   flags=0x1 | 0x8 | (0x4 if good else 0)), f"server crop frame {k}")
 
@@ -289,7 +308,7 @@ async def run_test(dut):
                                      flags=0x1 | 0x8 | (0x4 if good else 0))))
                 for r in range(R):
                     await tb.send(row_pkt(f, r, roi))
-            await tb.wait_for(tb.results, len(tb.results) + 2, 2 * trk_ns)
+            await wait_fids(tb, [f for f, _ in pend], 2 * trk_ns)
             for (f, e) in pend:
                 await compare(f, e, f"back-to-back pair {k}, frame {f}")
             tr.tx, tr.ty = pend[-1][1]["x"], pend[-1][1]["y"]
@@ -301,7 +320,7 @@ async def run_test(dut):
         fid += 1
         for r in range(8):
             await tb.send(row_pkt(f, r, p1))
-        await tb.wait_for(tb.results, len(tb.results) + 1, 100_000)
+        await wait_fids(tb, [f], 100_000)
         g = next((r for r in tb.results if r["frame_id"] == f), None)
         check("P1-size frame untracked (flags 1)", g is not None and g["flags"] == 0x1, str(g))
 
@@ -323,7 +342,7 @@ async def run_test(dut):
                 for off in range(0, len(tr2.tmpl), 1024):
                     await tb.send(struct.pack("<HH", 0x5AA6, off) + tr2.tmpl[off:off + 1024])
             await tb.send(row_pkt(f, r, img))
-        await tb.wait_for(tb.results, n0 + 1, trk_ns)
+        await wait_fids(tb, [f], trk_ns)
         await compare(f, exp, "template sent mid-frame: frame uses the old one")
         model.set_template(tr2.tmpl)
         tr.tmpl = tr2.tmpl

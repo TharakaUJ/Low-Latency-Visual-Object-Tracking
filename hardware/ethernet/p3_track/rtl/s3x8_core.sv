@@ -38,7 +38,9 @@ module s3x8_core #(
 );
     localparam int AW = $clog2(TMPL_BYTES);
 
-    typedef enum logic [2:0] {ST_RUN, ST_DRAIN, ST_COPY, ST_SOF, ST_DONE} state_t;
+    // ST_GAP: one stalled clock after sof, so the registered sof pulse reaches s3x8_top before the
+    // first pixel (a pixel in the sof clock is lost and every later pixel lands one column early).
+    typedef enum logic [2:0] {ST_RUN, ST_DRAIN, ST_COPY, ST_SOF, ST_DONE, ST_GAP} state_t;
     state_t state;
 
     wire [1:0] tag = s_tdata[15:14];
@@ -133,7 +135,9 @@ module s3x8_core #(
                         rows_cnt <= '0;
                         inorder  <= (s_tdata[8:0] == 9'd0);
                         wait_t   <= '0;
-                        state    <= frame_on ? ST_DRAIN : (sh_pending ? ST_COPY : ST_SOF);
+                        // always drain first: s3x8_top needs idle clocks between done and the
+                        // next sof (a sof right after done shifted that frame by 5 columns)
+                        state    <= ST_DRAIN;
                         frame_on <= 1'b0;
                         cp       <= '0;
                     end else begin
@@ -150,7 +154,7 @@ module s3x8_core #(
                 default: ;
                 endcase
             end
-            ST_DRAIN: begin                                 // a frame was cut short: let the pipelines empty
+            ST_DRAIN: begin                                 // let the pipelines empty (frame done or cut short)
                 wait_t <= wait_t + 1'b1;
                 if (wait_t == DRAIN_CLKS) state <= sh_pending ? ST_COPY : ST_SOF;
             end
@@ -174,8 +178,9 @@ module s3x8_core #(
                 sof <= 1'b1;
                 frame_on <= 1'b1;
                 line_t <= '0;
-                state <= ST_RUN;
+                state <= ST_GAP;
             end
+            ST_GAP: state <= ST_RUN;
             ST_DONE: begin                                  // all ROI rows in: wait for the last candidates
                 if (done) begin
                     res_x <= {2'd0, best_x};

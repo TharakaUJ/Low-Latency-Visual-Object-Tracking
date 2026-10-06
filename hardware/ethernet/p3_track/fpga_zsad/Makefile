@@ -54,7 +54,7 @@ SYN_FILES += lib/eth/lib/axis/rtl/axis_async_fifo_adapter.v
 SYN_FILES += lib/eth/lib/axis/rtl/sync_reset.v
 
 # QSF files
-QSF_FILES = fpga.qsf
+QSF_FILES = fpga.qsf seed_2.qsf
 
 # SDC files
 SDC_FILES = fpga.sdc

@@ -74,3 +74,24 @@ Plan: object_tracking/presentation/demo/plan_P0_P1.md (approved 2026-10-05).
   - P3 ZSAD testbench (tb/test_p3.py, Verilator): FAILS. Bug 1 found and fixed: the "<12-byte packet = bad" rule also rejected the 6-byte set-position packet. Open bug: for the first FPGA-crop frame the tracker never returns a result (receiver timeout after 10 ms, flags 0x31), the next frame loses rows during that stall, and no results arrive after it. Suspect the tracker side (FIFO -> zsad_core) stops consuming. Debug plan: docs/NEXT_SESSION.md. The s3x8 testbench has not been run yet.
   - Makefile (hardware/ethernet/Makefile: build/program/sim/check/demo for P1-P3) and README.md written. .gitignore: p3 build outputs, sim_build_*, sim_*.log.
   - Stopped here at the user's request ("at a good enough checkpoint stop").
+
+## 2026-10-06 (day) P3a continued
+- User: "work on rtl finish the demo implementation" (continue P3a).
+- Bug 2 (row_stats, the P3 stall): with the crop in the RTL the tracker finishes while the rows below the ROI still arrive, i.e. before its frame takes the pending slot; the 1-clock result pulse was only accepted while a slot was pending, so it was lost -> 10 ms timeout (flags 0x31) -> receiver stalled -> MAC FIFO overflow (21/120 rows) -> every later cropped frame the same. Fix: latch the result (tag, x, y, score); match it to the pending tag later; latch cleared at each new_frame ctrl word (tags wrap at 16).
+- Testbench bug: frame() waited for "n0 + 1 results"; the close result of an incomplete frame counted, so every later wait was one result early (and the back-to-back pair started with the tracker still busy -> 12 rows lost in frame 1019). Fix: wait for the frame's own frame_id (wait_fids). Mismatch dumps added (tb/mismatch_<tracker>_<fid>.npz: ROI, template, origin, exp, got).
+- Cosmetic: untracked frames smaller than the ROI reported a negative origin (65526, 65516); now 0.
+- ZSAD testbench after these: 28/28 PASS (sim ~4 min).
+- Bug 3 (s3x8_core): first S-3x8 run: same score as the model but x one less (frame 1000: 53 vs 54, score 1998; model neighbours 9826/9757, so not a tie). The ROI reached s3x8_top shifted by one column: the registered sof pulse coincided with the first pixel (same bug as P2's zsad_core ST_GAP). Fix: ST_GAP after ST_SOF.
+- ZSAD build with the timing fixes: 29,030 LE (25 %), but setup still fails: clk[0] -0.221 ns (row_stats ROI clamp a_y -> p_oy) and clk[1] -0.602 ns (verilog-ethernet rgmii_phy_if rgmii_tx_clk_2 -> TX clock DDIO, 2 ns clk[0]->clk[1] window, 1.56 ns routing = placement; P1/P2 met it at +0.02). Fix for clk[0]: clamp compares moved to S_HDR_A (S_HDR_A2 = mux only; logically equal). For clk[1]: fitter seeds 1/2/3 built in parallel (fpga_zsad, fpga_zsad_s2, fpga_zsad_s3).
+- Timing: clk[1] (RGMII TX clock DDIO path) is placement-dependent: ZSAD seed 1 -0.459, seed 2 +0.125, seed 3 -0.757 ns. **ZSAD adopted with seed 2** (fpga_zsad/Makefile adds ../seed_2.qsf): all corners met (worst setup +0.020 clk[0] slow 85C, hold +0.127 fast), 29,028 LE (25 %), 274 kbit, 0 mult. ZSAD testbench on this RTL: 28/28.
+- S-3x8 build (default seed) meets all corners: 60,666 LE (53 %), 60 mult (11 %), 388 kbit; seed 2 also met (removed).
+- S-3x8 testbench after the sof gap fix: 24/28; crop frames exact. Remaining:
+  - after the untracked out-of-order frame the testbench sent the next 112-row frame at once; S-3x8 needs ~0.92 ms per ROI (800 clocks/line), two ROI frames (~10.5 k words) > 8192-word FIFO -> backpressure -> MAC FIFO dropped rows (frame 1011: 96/112). Throughput limit, not logic. Fix: tracker FIFO 16384 words for the S-3x8 build only (ZSAD unchanged).
+  - 2nd frame of each back-to-back pair: same score, x +5 (shifted stream) when sof follows done with no idle clocks (frames after a pause are exact). Fix: s3x8_core always drains 256 clocks before sof.
+- **Final simulation (all on the same RTL): ZSAD 28/28, S-3x8 28/28** (FPGA = model on every tracked frame: crop at the borders, set-position, out-of-order / incomplete / small / P1 frames, server crop, back-to-back pairs, template mid-frame). Tracker time after the last row: ZSAD 2..13,883 cycles (125 MHz), S-3x8 91,075..207,442 (0.73-1.66 ms; ~0.92 ms per ROI by design).
+- **Final builds, all timing corners met (setup/hold, slow 85C/0C, fast 0C):**
+  | build | LE | memory bits | mult 9-bit | worst setup slack |
+  | ZSAD (seed 2) | 29,028 (25 %) | 274,332 (7 %) | 0 | +0.020 ns clk[0] |
+  | S-3x8 (default seed) | 60,718 (53 %) | 527,232 (13 %) | 60 (11 %) | +0.118 ns clk[1] |
+- Known limits: S-3x8 throughput ~1 ROI per 0.92 ms (FIFO holds 2 ROI frames; more back to back = dropped rows, reported as incomplete frames, never wrong results). The clk[1] RGMII path is seed-sensitive: a future change can need another seed. A tracker timeout still stalls the receiver (up to 10 ms) at the next cropped frame.
+- Not done: board tests (board unplugged). Next session: docs/NEXT_SESSION.md.

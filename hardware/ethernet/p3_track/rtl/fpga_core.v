@@ -247,7 +247,11 @@ assign tx_ip_payload_axis_tuser = 0;
 `ifdef TRACKER_S3X8
 localparam TRK_ROI = 72, TRK_MARGIN = 4, TRK_TMPL = 2048;
 localparam [23:0] TRK_GOOD_MAX = 24'hFFFFFF;    // S-3x8: no reject rule
+// S-3x8 consumes a 72-row ROI in ~0.92 ms (800 clocks per line): the FIFO holds two ROI frames
+// (2 x 72 x 73 words) so a frame can arrive at line rate while the previous one is tracked
+localparam TRK_FIFO_DEPTH = 16384;
 `else
+localparam TRK_FIFO_DEPTH = 8192;
 localparam TRK_ROI = 80, TRK_MARGIN = 0, TRK_TMPL = 256;
 localparam [23:0] TRK_GOOD_MAX = 24'd8192;      // ZSAD: template_match REJECT_SAD
 `endif
@@ -319,7 +323,7 @@ row_stats_inst (
 // tracker path: one dual-clock frame FIFO (bad rows/templates dropped) into the ZSAD core
 
 axis_async_fifo #(
-    .DEPTH(8192),
+    .DEPTH(TRK_FIFO_DEPTH),
     .DATA_WIDTH(16),
     .KEEP_ENABLE(0),
     .LAST_ENABLE(1),

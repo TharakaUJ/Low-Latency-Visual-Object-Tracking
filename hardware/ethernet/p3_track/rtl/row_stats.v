@@ -125,6 +125,7 @@ reg [15:0] p_n = 0;         // template chunk: number of bytes (UDP length - 12)
 reg [10:0] p_lastidx = 0;   // template chunk: payload index of its last byte (UDP length - 9)
 reg        p_len14 = 0;     // UDP length 14 (position command)
 reg signed [17:0] a_x = 0, a_y = 0, hi_x = 0, hi_y = 0;   // origin computation, stage 1
+reg        lo_x = 0, lo_y = 0, gt_x = 0, gt_y = 0;       // stage 1 clamp decisions (a < 0 or frame < ROI; a > hi)
 
 // ---------------- current frame ----------------
 reg        f_active = 0;
@@ -157,6 +158,13 @@ reg [3:0]  n_tag = 0;
 reg [15:0] n_ox = 0, n_oy = 0;
 reg [31:0] n_dst_ip = 0;
 reg [15:0] n_dst_port = 0;
+// latched tracker result: with the crop in the RTL the tracker can finish while the rows below the
+// ROI are still arriving, i.e. before its frame takes the pending slot. Cleared at each new_frame
+// ctrl word, so a result can only match a frame tag pushed after it was cleared.
+reg        l_valid = 0;
+reg [3:0]  l_tag = 0;
+reg [7:0]  l_x = 0, l_y = 0;
+reg [23:0] l_score = 0;
 
 // ---------------- TX ----------------
 reg        r_pending = 0, r_hdr_done = 0;
@@ -263,12 +271,13 @@ always @(posedge clk) begin
 
     // ---------------- tracker result for the pending frame ----------------
     if (q_valid && !q_ready) begin
-        if (res_new && res_ftag == q_tag) begin : got_res
+        if (l_valid && l_tag == q_tag) begin : got_res
             reg        good;
             reg [15:0] nx, ny;
-            good = (res_score <= GOOD_MAX);
-            nx = q_ox + {8'd0, res_x} + MARGIN;
-            ny = q_oy + {8'd0, res_y} + MARGIN;
+            good = (l_score <= GOOD_MAX);
+            nx = q_ox + {8'd0, l_x} + MARGIN;
+            ny = q_oy + {8'd0, l_y} + MARGIN;
+            l_valid <= 1'b0;
             if (good) begin
                 pos_x <= nx;
                 pos_y <= ny;
@@ -277,7 +286,7 @@ always @(posedge clk) begin
             q_res[255:224] <= cyc;
             q_res[271:256] <= good ? nx : pos_x;
             q_res[287:272] <= good ? ny : pos_y;
-            q_res[319:288] <= {8'd0, res_score};
+            q_res[319:288] <= {8'd0, l_score};
             q_ready <= 1'b1;
         end else if (q_tmo_hit) begin
             q_res[31:16]  <= q_res[31:16] | 16'h0010;
@@ -286,6 +295,16 @@ always @(posedge clk) begin
             q_res[287:272] <= pos_y;
             q_ready <= 1'b1;
         end
+    end
+    // latch every result (a newer one replaces an unclaimed older one)
+    if (res_new) begin
+        l_valid <= 1'b1;
+        l_tag   <= res_ftag;
+        l_x     <= res_x;
+        l_y     <= res_y;
+        l_score <= res_score;
+    end else if (ctrl_push && trk_tready && trk_tdata[13]) begin
+        l_valid <= 1'b0;
     end
     if (q_emit) begin
         send(q_res, q_dst_ip, q_dst_port);
@@ -364,6 +383,11 @@ always @(posedge clk) begin
         a_y  <= $signed({2'b00, pos_y}) - $signed({2'b00, OFF});
         hi_x <= $signed({2'b00, p_width}) - ROI;
         hi_y <= $signed({2'b00, p_height}) - ROI;
+        // the clamp compares, taken from registers here so S_HDR_A2 is only a mux (125 MHz timing)
+        lo_x <= (pos_x < OFF) || (p_width < ROI);
+        lo_y <= (pos_y < OFF) || (p_height < ROI);
+        gt_x <= ({1'b0, pos_x} + (ROI - OFF)) > {1'b0, p_width};
+        gt_y <= ({1'b0, pos_y} + (ROI - OFF)) > {1'b0, p_height};
         // a cropped new frame needs the outstanding result first (its origin depends on it)
         if (!((!f_active || (p_fid != f_fid)) && (p_width != ROI || p_height != ROI) && q_valid && !q_ready))
             state <= S_HDR_A2;
@@ -371,8 +395,9 @@ always @(posedge clk) begin
     S_HDR_A2: begin
         // ROI origin: new frame -> clamp(t - OFF, 0, size - ROI); continuing frame -> the frame's origin
         if (p_new) begin
-            p_ox <= (a_x < 0) ? 16'd0 : (a_x > hi_x) ? hi_x[15:0] : a_x[15:0];
-            p_oy <= (a_y < 0) ? 16'd0 : (a_y > hi_y) ? hi_y[15:0] : a_y[15:0];
+            // frame smaller than the ROI (untracked): origin 0
+            p_ox <= lo_x ? 16'd0 : gt_x ? hi_x[15:0] : a_x[15:0];
+            p_oy <= lo_y ? 16'd0 : gt_y ? hi_y[15:0] : a_y[15:0];
         end else begin
             p_ox <= f_ox;
             p_oy <= f_oy;
@@ -535,6 +560,7 @@ always @(posedge clk) begin
         pos_y <= 0;
         q_valid <= 0;
         q_ready <= 0;
+        l_valid <= 0;
         r_pending <= 0;
         r_hdr_done <= 0;
         s_load <= 0;
