@@ -1,0 +1,2 @@
+rid,s,applied,L,late,mode,edge_x,edge_y,heavy_x,heavy_y,drift_px,drift_orig_px,before_x,before_y,after_x,after_y,template,ostrack_ms,calls,peaks,answer_ms,box_orig
+173,1260,1266,6,0,pos+tmpl,223,162,223,161,1.0,2.7,217,161,217,160,1,16.1,1,0.856,36.8,"[616.4, 421.9, 24.6, 77.7]"

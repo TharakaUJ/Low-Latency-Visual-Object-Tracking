@@ -68,3 +68,25 @@ tiny_cnn/firmware/app/bsp/libhal2_bsp.a
 # tiny_cnn -- host tool
 tiny_cnn/host/__pycache__/
 tiny_cnn/host/results/
+
+# hardware/ethernet -- sim venv, cocotb and Quartus build outputs, raw run data
+hardware/ethernet/.venv-sim/
+hardware/ethernet/**/sim_build/
+hardware/ethernet/**/results.xml
+hardware/ethernet/**/sim.log
+hardware/ethernet/**/build*.log
+hardware/ethernet/*/fpga/*
+!hardware/ethernet/*/fpga/Makefile
+hardware/ethernet/results/**/frames.csv
+hardware/ethernet/results/*.log
+# hardware/ethernet -- demo videos, stress-test raw data, compiled host tools
+hardware/ethernet/results/**/*.mp4
+hardware/ethernet/results/**/*.bin
+hardware/ethernet/host/burst_send
+hardware/ethernet/host/speed_send
+# hardware/ethernet/p3_track -- Quartus outputs per tracker, Verilator builds, sim logs
+hardware/ethernet/p3_track/fpga_*/*
+!hardware/ethernet/p3_track/fpga_*/Makefile
+!hardware/ethernet/p3_track/fpga_s3x8/s3x8.qsf
+hardware/ethernet/**/sim_build_*/
+hardware/ethernet/**/sim_*.log
